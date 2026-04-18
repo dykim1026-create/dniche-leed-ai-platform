@@ -21,6 +21,7 @@ from app.schemas import (
     DocumentResponse,
     DocumentSearchResultResponse,
     ReviewEvidenceItemResponse,
+    CorrectiveActionResponse,
     ReviewFindingResponse,
     Agent1ReviewResponse,
 )
@@ -59,6 +60,97 @@ REVIEW_TOPICS = [
         "recommendation": "Add ventilation basis, IAQ strategy, VOC-related specifications, daylight evidence, and thermal comfort notes.",
     },
 ]
+
+CORRECTIVE_ACTION_LIBRARY = {
+    "energy_performance": [
+        {
+            "discipline": "Architecture",
+            "action": "Provide envelope performance summary including wall, roof, glazing, and shading assumptions.",
+            "reason": "Envelope-related evidence is needed to support energy compliance review.",
+        },
+        {
+            "discipline": "Mechanical",
+            "action": "Provide HVAC system description, efficiencies, controls sequence, and ventilation basis.",
+            "reason": "Mechanical design evidence is central to energy performance assessment.",
+        },
+        {
+            "discipline": "Electrical",
+            "action": "Provide lighting power density, lighting controls, and major equipment load assumptions.",
+            "reason": "Lighting and connected loads affect energy evaluation and documentation.",
+        },
+        {
+            "discipline": "Sustainability",
+            "action": "Prepare or update the energy model narrative and cross-check design inputs against LEED submission needs.",
+            "reason": "A coordinated sustainability review is needed to consolidate evidence.",
+        },
+    ],
+    "water_efficiency": [
+        {
+            "discipline": "Plumbing",
+            "action": "Provide plumbing fixture schedule with flow rates and flush rates for all fixture types.",
+            "reason": "Fixture performance data is required for water reduction review.",
+        },
+        {
+            "discipline": "Landscape",
+            "action": "Provide irrigation strategy, landscape water demand assumptions, and any reduced-water design measures.",
+            "reason": "Outdoor water use evidence is needed for landscape-related water credits.",
+        },
+        {
+            "discipline": "Architecture",
+            "action": "Confirm any water-using equipment or special spaces that may affect baseline and proposed usage.",
+            "reason": "Architectural program information can change water demand assumptions.",
+        },
+        {
+            "discipline": "Sustainability",
+            "action": "Prepare indoor and outdoor water calculation sheets aligned with the target credit path.",
+            "reason": "A consolidated calculation package is required for review and submittal.",
+        },
+    ],
+    "materials": [
+        {
+            "discipline": "Architecture",
+            "action": "Provide finish schedules, material specifications, and product-level sustainability documentation where available.",
+            "reason": "Architectural material data supports materials and carbon-related review.",
+        },
+        {
+            "discipline": "Structure",
+            "action": "Provide concrete and steel quantity summaries, mix information, and any low-carbon alternatives under consideration.",
+            "reason": "Structural materials usually drive embodied carbon impact.",
+        },
+        {
+            "discipline": "Procurement / Cost",
+            "action": "Collect EPDs, recycled content declarations, and supplier sustainability documents for priority products.",
+            "reason": "Supplier documentation is needed to substantiate material-related claims.",
+        },
+        {
+            "discipline": "Sustainability",
+            "action": "Prepare a material compliance tracker showing required evidence by package and responsible consultant.",
+            "reason": "Tracking is needed to avoid documentation gaps across disciplines.",
+        },
+    ],
+    "ieq": [
+        {
+            "discipline": "Mechanical",
+            "action": "Provide ventilation calculations, outside air assumptions, filtration approach, and IAQ-related control strategy.",
+            "reason": "Ventilation evidence is a key IEQ input.",
+        },
+        {
+            "discipline": "Architecture",
+            "action": "Provide daylight, glazing, shading, and spatial planning information relevant to occupied spaces.",
+            "reason": "Architectural design decisions strongly affect IEQ performance.",
+        },
+        {
+            "discipline": "Interior Design",
+            "action": "Provide low-VOC material specifications and interior finish schedules.",
+            "reason": "Interior product selections affect emissions-related IEQ review.",
+        },
+        {
+            "discipline": "Sustainability",
+            "action": "Prepare an IEQ evidence matrix covering ventilation, materials, daylight, and thermal comfort inputs.",
+            "reason": "A coordinated matrix reduces missing evidence during LEED review.",
+        },
+    ],
+}
 
 
 app.add_middleware(
@@ -275,6 +367,42 @@ def determine_overall_status(findings: list[ReviewFindingResponse], parsed_docum
     return "insufficient_evidence"
 
 
+def get_priority_for_status(status: str) -> str:
+    if status == "no_evidence":
+        return "high"
+    if status == "limited_evidence":
+        return "medium"
+    return "low"
+
+
+def build_corrective_actions(topic_id: str, status: str):
+    base_actions = CORRECTIVE_ACTION_LIBRARY.get(topic_id, [])
+    priority = get_priority_for_status(status)
+
+    corrective_actions = []
+    for item in base_actions:
+        if status == "no_evidence":
+            action_text = f"Immediately provide: {item['action']}"
+            reason_text = f"{item['reason']} Current review found no supporting evidence."
+        elif status == "limited_evidence":
+            action_text = f"Strengthen documentation: {item['action']}"
+            reason_text = f"{item['reason']} Current review found only limited evidence."
+        else:
+            action_text = f"Refine and verify: {item['action']}"
+            reason_text = f"{item['reason']} Evidence exists, but should be validated and organized for submission readiness."
+
+        corrective_actions.append(
+            CorrectiveActionResponse(
+                discipline=item["discipline"],
+                priority=priority,
+                action=action_text,
+                reason=reason_text,
+            )
+        )
+
+    return corrective_actions
+
+
 @app.get("/")
 def read_root():
     return {"message": "Backend is running"}
@@ -481,6 +609,7 @@ def run_agent1_review(project_id: int, db: Session = Depends(get_db)):
     for topic in REVIEW_TOPICS:
         evidences, total_count = collect_topic_evidence(parsed_documents, topic["keywords"])
         status = determine_finding_status(total_count)
+        corrective_actions = build_corrective_actions(topic["topic_id"], status)
 
         findings.append(
             ReviewFindingResponse(
@@ -491,6 +620,7 @@ def run_agent1_review(project_id: int, db: Session = Depends(get_db)):
                 searched_keywords=topic["keywords"],
                 recommendation=topic["recommendation"],
                 evidences=evidences,
+                corrective_actions=corrective_actions,
             )
         )
 

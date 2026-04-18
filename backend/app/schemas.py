@@ -52,6 +52,13 @@ class ReviewEvidenceItemResponse(BaseModel):
     snippet: str
 
 
+class CorrectiveActionResponse(BaseModel):
+    discipline: str
+    priority: str
+    action: str
+    reason: str
+
+
 class ReviewFindingResponse(BaseModel):
     topic_id: str
     topic_name: str
@@ -60,6 +67,7 @@ class ReviewFindingResponse(BaseModel):
     searched_keywords: list[str]
     recommendation: str
     evidences: list[ReviewEvidenceItemResponse]
+    corrective_actions: list[CorrectiveActionResponse]
 
 
 class Agent1ReviewResponse(BaseModel):

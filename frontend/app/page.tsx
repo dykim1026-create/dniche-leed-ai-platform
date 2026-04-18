@@ -35,6 +35,13 @@ type ReviewEvidenceItem = {
   snippet: string;
 };
 
+type CorrectiveAction = {
+  discipline: string;
+  priority: string;
+  action: string;
+  reason: string;
+};
+
 type ReviewFinding = {
   topic_id: string;
   topic_name: string;
@@ -43,6 +50,7 @@ type ReviewFinding = {
   searched_keywords: string[];
   recommendation: string;
   evidences: ReviewEvidenceItem[];
+  corrective_actions: CorrectiveAction[];
 };
 
 type Agent1Review = {
@@ -458,15 +466,9 @@ export default function HomePage() {
           <p style={{ marginTop: 16 }}>No review data yet.</p>
         ) : (
           <div style={{ marginTop: 16 }}>
-            <p>
-              Project: <strong>{agent1Review.project_name}</strong>
-            </p>
-            <p>
-              Overall status: <strong>{agent1Review.overall_status}</strong>
-            </p>
-            <p>
-              Reviewed documents: <strong>{agent1Review.reviewed_document_count}</strong> / Parsed documents: <strong>{agent1Review.parsed_document_count}</strong>
-            </p>
+            <p>Project: <strong>{agent1Review.project_name}</strong></p>
+            <p>Overall status: <strong>{agent1Review.overall_status}</strong></p>
+            <p>Reviewed documents: <strong>{agent1Review.reviewed_document_count}</strong> / Parsed documents: <strong>{agent1Review.parsed_document_count}</strong></p>
 
             <div style={{ display: "grid", gap: 16, marginTop: 16 }}>
               {agent1Review.findings.map((finding) => (
@@ -484,10 +486,38 @@ export default function HomePage() {
                   <p>Searched keywords: {finding.searched_keywords.join(", ")}</p>
                   <p>Recommendation: {finding.recommendation}</p>
 
+                  <div style={{ marginTop: 12 }}>
+                    <strong>Corrective Actions by Discipline</strong>
+                    {finding.corrective_actions.length === 0 ? (
+                      <p>No corrective actions.</p>
+                    ) : (
+                      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 8 }}>
+                        <thead>
+                          <tr>
+                            <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Discipline</th>
+                            <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Priority</th>
+                            <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Action</th>
+                            <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Reason</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {finding.corrective_actions.map((action, index) => (
+                            <tr key={`${finding.topic_id}-action-${index}`}>
+                              <td style={{ padding: "10px 0", verticalAlign: "top" }}>{action.discipline}</td>
+                              <td style={{ padding: "10px 0", verticalAlign: "top" }}>{action.priority}</td>
+                              <td style={{ padding: "10px 0", verticalAlign: "top" }}>{action.action}</td>
+                              <td style={{ padding: "10px 0", verticalAlign: "top" }}>{action.reason}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+
                   {finding.evidences.length === 0 ? (
-                    <p>No evidence found.</p>
+                    <p style={{ marginTop: 16 }}>No evidence found.</p>
                   ) : (
-                    <div style={{ marginTop: 12 }}>
+                    <div style={{ marginTop: 16 }}>
                       <strong>Evidence</strong>
                       <ul style={{ marginTop: 8 }}>
                         {finding.evidences.map((evidence, index) => (
