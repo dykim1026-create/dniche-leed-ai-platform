@@ -25,6 +25,8 @@ from app.schemas import (
     CorrectiveActionResponse,
     ReviewFindingResponse,
     Agent1ReviewResponse,
+    EnergyFindingResponse,
+    Agent2EnergyReviewResponse,
 )
 
 app = FastAPI(title="Dniche LEED AI Backend")
@@ -149,6 +151,196 @@ CORRECTIVE_ACTION_LIBRARY = {
             "discipline": "Sustainability",
             "action": "Prepare an IEQ evidence matrix covering ventilation, materials, daylight, and thermal comfort inputs.",
             "reason": "A coordinated matrix reduces missing evidence during LEED review.",
+        },
+    ],
+}
+
+ENERGY_READINESS_ITEMS = [
+    {
+        "readiness_item_id": "envelope_data",
+        "readiness_item_name": "Envelope Data",
+        "keywords": ["envelope", "u-value", "glazing", "roof", "wall", "shading"],
+        "summary": "Building envelope thermal inputs for simulation.",
+        "missing_inputs": [
+            "Wall/roof/glazing performance values",
+            "Window-to-wall ratio or façade assumptions",
+            "Shading or solar control information",
+        ],
+    },
+    {
+        "readiness_item_id": "hvac_system",
+        "readiness_item_name": "HVAC System",
+        "keywords": ["hvac", "chiller", "ahu", "fcu", "cop", "cooling", "heating"],
+        "summary": "Mechanical system type and performance inputs.",
+        "missing_inputs": [
+            "System type and zoning logic",
+            "Equipment efficiencies",
+            "Control sequence and setpoints",
+        ],
+    },
+    {
+        "readiness_item_id": "lighting_and_loads",
+        "readiness_item_name": "Lighting and Equipment Loads",
+        "keywords": ["lighting", "lpd", "equipment", "plug load", "load density"],
+        "summary": "Lighting and internal equipment load inputs.",
+        "missing_inputs": [
+            "Lighting power density",
+            "Plug/process load assumptions",
+            "Control strategy for lighting",
+        ],
+    },
+    {
+        "readiness_item_id": "occupancy_and_schedules",
+        "readiness_item_name": "Occupancy and Schedules",
+        "keywords": ["occupancy", "schedule", "operation", "hours", "people"],
+        "summary": "Occupancy, operating hours, and schedule assumptions.",
+        "missing_inputs": [
+            "Occupancy density",
+            "Operating schedules",
+            "Holiday or weekend schedule assumptions",
+        ],
+    },
+    {
+        "readiness_item_id": "ventilation",
+        "readiness_item_name": "Ventilation / Outside Air",
+        "keywords": ["ventilation", "outside air", "fresh air", "ashrae", "air change"],
+        "summary": "Ventilation and outside air design basis.",
+        "missing_inputs": [
+            "Outside air rates",
+            "Ventilation calculation basis",
+            "Demand control ventilation assumptions",
+        ],
+    },
+    {
+        "readiness_item_id": "dhw",
+        "readiness_item_name": "Domestic Hot Water",
+        "keywords": ["domestic hot water", "dhw", "hot water", "water heater", "boiler"],
+        "summary": "Domestic hot water system and related energy inputs.",
+        "missing_inputs": [
+            "DHW system description",
+            "Fuel type and efficiency",
+            "Hot water demand assumptions",
+        ],
+    },
+    {
+        "readiness_item_id": "baseline_reference",
+        "readiness_item_name": "Baseline / Code Reference",
+        "keywords": ["baseline", "ashrae", "appendix g", "code", "reference building"],
+        "summary": "Baseline model or code reference readiness.",
+        "missing_inputs": [
+            "Applicable baseline standard",
+            "Modeling rules reference",
+            "Baseline interpretation narrative",
+        ],
+    },
+    {
+        "readiness_item_id": "renewables",
+        "readiness_item_name": "Renewables",
+        "keywords": ["solar", "pv", "photovoltaic", "renewable", "battery"],
+        "summary": "Renewable energy input readiness.",
+        "missing_inputs": [
+            "PV capacity or area",
+            "Renewable generation assumptions",
+            "Grid interaction/storage assumptions",
+        ],
+    },
+]
+
+ENERGY_ACTION_LIBRARY = {
+    "envelope_data": [
+        {
+            "discipline": "Architecture",
+            "action": "Provide envelope assembly performance data, glazing details, and shading assumptions.",
+            "reason": "Envelope thermal properties are required for energy model inputs.",
+        },
+        {
+            "discipline": "Sustainability",
+            "action": "Check that envelope inputs are aligned with the intended LEED energy modeling approach.",
+            "reason": "Model assumptions must be documented consistently.",
+        },
+    ],
+    "hvac_system": [
+        {
+            "discipline": "Mechanical",
+            "action": "Provide HVAC system narrative, equipment efficiencies, zoning logic, and control sequence.",
+            "reason": "Mechanical system inputs are essential for simulation readiness.",
+        },
+        {
+            "discipline": "Sustainability",
+            "action": "Prepare an HVAC input sheet for simulation handoff.",
+            "reason": "A consistent simulation-ready dataset is needed.",
+        },
+    ],
+    "lighting_and_loads": [
+        {
+            "discipline": "Electrical",
+            "action": "Provide lighting power density, lighting controls, and major internal equipment loads.",
+            "reason": "Lighting and plug loads materially affect modeled energy use.",
+        },
+        {
+            "discipline": "Sustainability",
+            "action": "Map all load assumptions into a simulation input template.",
+            "reason": "Load consistency is needed across all model zones.",
+        },
+    ],
+    "occupancy_and_schedules": [
+        {
+            "discipline": "Architecture",
+            "action": "Confirm space types, occupancy assumptions, and operating patterns.",
+            "reason": "Space program and occupancy directly affect schedules.",
+        },
+        {
+            "discipline": "Sustainability",
+            "action": "Prepare standardized weekday/weekend/holiday schedules.",
+            "reason": "Simulation requires explicit schedule sets.",
+        },
+    ],
+    "ventilation": [
+        {
+            "discipline": "Mechanical",
+            "action": "Provide outside air rates, ventilation method, and any demand-control logic.",
+            "reason": "Ventilation assumptions affect fan and conditioning loads.",
+        },
+        {
+            "discipline": "Sustainability",
+            "action": "Cross-check ventilation assumptions against the baseline/reference standard.",
+            "reason": "Baseline and proposed ventilation assumptions must be consistent.",
+        },
+    ],
+    "dhw": [
+        {
+            "discipline": "Mechanical",
+            "action": "Provide domestic hot water system type, fuel, and efficiency assumptions.",
+            "reason": "DHW can be a non-trivial simulation input depending on asset type.",
+        },
+        {
+            "discipline": "Plumbing",
+            "action": "Provide hot water demand assumptions or fixture-based demand inputs.",
+            "reason": "Demand assumptions are needed for DHW energy modeling.",
+        },
+    ],
+    "baseline_reference": [
+        {
+            "discipline": "Sustainability",
+            "action": "Define the baseline/code framework and document modeling assumptions.",
+            "reason": "A clear baseline framework is required before simulation starts.",
+        },
+        {
+            "discipline": "Energy Modeler",
+            "action": "Prepare a baseline interpretation note for review.",
+            "reason": "The simulation method must be traceable and reviewable.",
+        },
+    ],
+    "renewables": [
+        {
+            "discipline": "Electrical",
+            "action": "Provide PV or renewable system capacity, layout assumptions, and expected generation inputs.",
+            "reason": "Renewable systems need explicit modeled assumptions.",
+        },
+        {
+            "discipline": "Sustainability",
+            "action": "Clarify whether renewables are part of base scope or improvement scenario.",
+            "reason": "Scenario boundaries affect simulation results and reporting.",
         },
     ],
 }
@@ -377,9 +569,9 @@ def determine_overall_status(findings: list[ReviewFindingResponse], parsed_docum
 
 
 def get_priority_for_status(status: str) -> str:
-    if status == "no_evidence":
+    if status in {"no_evidence", "missing"}:
         return "high"
-    if status == "limited_evidence":
+    if status in {"limited_evidence", "partial"}:
         return "medium"
     return "low"
 
@@ -462,6 +654,124 @@ def build_agent1_review(project_id: int, db: Session) -> Agent1ReviewResponse:
     overall_progress_percent = int((overall_score / overall_max_score) * 100) if overall_max_score else 0
 
     return Agent1ReviewResponse(
+        project_id=project.id,
+        project_name=project.name,
+        overall_status=overall_status,
+        overall_score=overall_score,
+        overall_max_score=overall_max_score,
+        overall_progress_percent=overall_progress_percent,
+        reviewed_document_count=len(documents),
+        parsed_document_count=len(parsed_documents),
+        findings=findings,
+    )
+
+
+def determine_energy_status(total_count: int) -> str:
+    if total_count >= 3:
+        return "ready"
+    if total_count >= 1:
+        return "partial"
+    return "missing"
+
+
+def get_energy_score(status: str) -> int:
+    if status == "ready":
+        return 100
+    if status == "partial":
+        return 50
+    return 0
+
+
+def build_energy_corrective_actions(readiness_item_id: str, status: str):
+    base_actions = ENERGY_ACTION_LIBRARY.get(readiness_item_id, [])
+    priority = get_priority_for_status(status)
+
+    actions = []
+    for item in base_actions:
+        if status == "missing":
+            action_text = f"Immediately provide: {item['action']}"
+            reason_text = f"{item['reason']} Current energy readiness review found no usable evidence."
+        elif status == "partial":
+            action_text = f"Complete missing inputs: {item['action']}"
+            reason_text = f"{item['reason']} Current energy readiness review found only partial evidence."
+        else:
+            action_text = f"Validate simulation input: {item['action']}"
+            reason_text = f"{item['reason']} Evidence exists, but it should be checked before simulation."
+        actions.append(
+            CorrectiveActionResponse(
+                discipline=item["discipline"],
+                priority=priority,
+                action=action_text,
+                reason=reason_text,
+            )
+        )
+    return actions
+
+
+def determine_energy_overall_status(findings: list[EnergyFindingResponse], parsed_document_count: int) -> str:
+    if parsed_document_count == 0:
+        return "insufficient_documents"
+
+    statuses = [finding.status for finding in findings]
+
+    if all(status == "ready" for status in statuses):
+        return "ready_for_simulation"
+    if any(status in {"ready", "partial"} for status in statuses):
+        return "partial_readiness"
+    return "not_ready"
+
+
+def build_agent2_energy_review(project_id: int, db: Session) -> Agent2EnergyReviewResponse:
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    documents = (
+        db.query(Document)
+        .filter(Document.project_id == project_id)
+        .order_by(Document.id.desc())
+        .all()
+    )
+
+    parsed_documents = [
+        document
+        for document in documents
+        if document.parse_status == "parsed" and (document.extracted_text or "").strip()
+    ]
+
+    findings = []
+
+    for item in ENERGY_READINESS_ITEMS:
+        evidences, total_count = collect_topic_evidence(parsed_documents, item["keywords"])
+        status = determine_energy_status(total_count)
+        score = get_energy_score(status)
+        max_score = 100
+        progress_percent = score
+        corrective_actions = build_energy_corrective_actions(item["readiness_item_id"], status)
+
+        findings.append(
+            EnergyFindingResponse(
+                readiness_item_id=item["readiness_item_id"],
+                readiness_item_name=item["readiness_item_name"],
+                status=status,
+                score=score,
+                max_score=max_score,
+                progress_percent=progress_percent,
+                evidence_count=total_count,
+                searched_keywords=item["keywords"],
+                summary=item["summary"],
+                missing_inputs=item["missing_inputs"],
+                evidences=evidences,
+                corrective_actions=corrective_actions,
+            )
+        )
+
+    overall_status = determine_energy_overall_status(findings, len(parsed_documents))
+    overall_score = sum(finding.score for finding in findings)
+    overall_max_score = sum(finding.max_score for finding in findings) if findings else 0
+    overall_progress_percent = int((overall_score / overall_max_score) * 100) if overall_max_score else 0
+
+    return Agent2EnergyReviewResponse(
         project_id=project.id,
         project_name=project.name,
         overall_status=overall_status,
@@ -697,11 +1007,7 @@ def export_agent1_review_csv(project_id: int, db: Session = Depends(get_db)):
     ])
 
     for finding in review.findings:
-        max_rows = max(
-            1,
-            len(finding.corrective_actions),
-            len(finding.evidences),
-        )
+        max_rows = max(1, len(finding.corrective_actions), len(finding.evidences))
 
         for i in range(max_rows):
             corrective_action = finding.corrective_actions[i] if i < len(finding.corrective_actions) else None
@@ -732,7 +1038,10 @@ def export_agent1_review_csv(project_id: int, db: Session = Depends(get_db)):
     return StreamingResponse(
         iter([output.getvalue()]),
         media_type="text/csv",
-        headers={
-            "Content-Disposition": f'attachment; filename="{filename}"'
-        },
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@app.get("/projects/{project_id}/agent2/energy-review", response_model=Agent2EnergyReviewResponse)
+def run_agent2_energy_review(project_id: int, db: Session = Depends(get_db)):
+    return build_agent2_energy_review(project_id, db)

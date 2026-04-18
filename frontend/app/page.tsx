@@ -68,6 +68,33 @@ type Agent1Review = {
   findings: ReviewFinding[];
 };
 
+type EnergyFinding = {
+  readiness_item_id: string;
+  readiness_item_name: string;
+  status: string;
+  score: number;
+  max_score: number;
+  progress_percent: number;
+  evidence_count: number;
+  searched_keywords: string[];
+  summary: string;
+  missing_inputs: string[];
+  evidences: ReviewEvidenceItem[];
+  corrective_actions: CorrectiveAction[];
+};
+
+type Agent2EnergyReview = {
+  project_id: number;
+  project_name: string;
+  overall_status: string;
+  overall_score: number;
+  overall_max_score: number;
+  overall_progress_percent: number;
+  reviewed_document_count: number;
+  parsed_document_count: number;
+  findings: EnergyFinding[];
+};
+
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8001";
 
@@ -100,7 +127,7 @@ function ProgressBar({ value }: { value: number }) {
 }
 
 function getStatusBadgeStyle(status: string): React.CSSProperties {
-  if (status === "evidence_found" || status === "good_initial_coverage") {
+  if (["evidence_found", "good_initial_coverage", "ready", "ready_for_simulation"].includes(status)) {
     return {
       display: "inline-block",
       padding: "4px 10px",
@@ -112,7 +139,7 @@ function getStatusBadgeStyle(status: string): React.CSSProperties {
     };
   }
 
-  if (status === "limited_evidence" || status === "partial_coverage") {
+  if (["limited_evidence", "partial_coverage", "partial", "partial_readiness"].includes(status)) {
     return {
       display: "inline-block",
       padding: "4px 10px",
@@ -124,7 +151,7 @@ function getStatusBadgeStyle(status: string): React.CSSProperties {
     };
   }
 
-  if (status === "no_evidence" || status === "insufficient_evidence" || status === "insufficient_documents") {
+  if (["no_evidence", "insufficient_evidence", "insufficient_documents", "missing", "not_ready"].includes(status)) {
     return {
       display: "inline-block",
       padding: "4px 10px",
@@ -204,11 +231,13 @@ export default function HomePage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [agent1Review, setAgent1Review] = useState<Agent1Review | null>(null);
+  const [agent2Review, setAgent2Review] = useState<Agent2EnergyReview | null>(null);
   const [loading, setLoading] = useState(true);
   const [submittingProject, setSubmittingProject] = useState(false);
   const [submittingDocument, setSubmittingDocument] = useState(false);
   const [parsingDocumentId, setParsingDocumentId] = useState<number | null>(null);
   const [runningAgent1, setRunningAgent1] = useState(false);
+  const [runningAgent2, setRunningAgent2] = useState(false);
   const [topicStatusFilter, setTopicStatusFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [error, setError] = useState("");
@@ -264,6 +293,20 @@ export default function HomePage() {
     setAgent1Review(data);
   }
 
+  async function loadAgent2Review(projectId: string) {
+    if (!projectId) {
+      setAgent2Review(null);
+      return;
+    }
+
+    const res = await fetch(`${API_BASE_URL}/projects/${projectId}/agent2/energy-review`);
+    if (!res.ok) {
+      throw new Error("Failed to load Agent 2 review");
+    }
+    const data = await res.json();
+    setAgent2Review(data);
+  }
+
   useEffect(() => {
     async function initialize() {
       try {
@@ -287,12 +330,12 @@ export default function HomePage() {
         setError("Failed to load documents.");
         console.error(err);
       });
-      loadAgent1Review(selectedProjectId).catch((err) => {
-        console.error(err);
-      });
+      loadAgent1Review(selectedProjectId).catch(console.error);
+      loadAgent2Review(selectedProjectId).catch(console.error);
     } else {
       setDocuments([]);
       setAgent1Review(null);
+      setAgent2Review(null);
     }
   }, [selectedProjectId]);
 
@@ -395,6 +438,7 @@ export default function HomePage() {
       setUploadMessage("Document uploaded successfully.");
       await loadDocuments(selectedProjectId);
       await loadAgent1Review(selectedProjectId);
+      await loadAgent2Review(selectedProjectId);
     } catch (err) {
       setUploadMessage("Failed to upload document.");
       console.error(err);
@@ -419,6 +463,7 @@ export default function HomePage() {
       if (selectedProjectId) {
         await loadDocuments(selectedProjectId);
         await loadAgent1Review(selectedProjectId);
+        await loadAgent2Review(selectedProjectId);
       }
     } catch (err) {
       setUploadMessage("Failed to parse document.");
@@ -445,6 +490,23 @@ export default function HomePage() {
     }
   }
 
+  async function handleRunAgent2() {
+    if (!selectedProjectId) {
+      setUploadMessage("Please select a project first.");
+      return;
+    }
+
+    try {
+      setRunningAgent2(true);
+      await loadAgent2Review(selectedProjectId);
+    } catch (err) {
+      setUploadMessage("Failed to run Agent 2 review.");
+      console.error(err);
+    } finally {
+      setRunningAgent2(false);
+    }
+  }
+
   function handleExportCsv() {
     if (!selectedProjectId) {
       setUploadMessage("Please select a project first.");
@@ -460,7 +522,7 @@ export default function HomePage() {
   return (
     <main style={{ maxWidth: 1200, margin: "0 auto" }}>
       <h1>Dniche LEED AI Platform</h1>
-      <p>Create projects, upload documents, parse files, and review Agent 1 findings.</p>
+      <p>Create projects, upload documents, parse files, and review multi-agent findings.</p>
 
       <div style={{ padding: 16, border: "1px solid #ddd", borderRadius: 8, marginBottom: 24 }}>
         <h2 style={{ marginTop: 0 }}>System Status</h2>
@@ -634,14 +696,11 @@ export default function HomePage() {
           <div style={{ marginTop: 16 }}>
             <p>Project: <strong>{agent1Review.project_name}</strong></p>
             <p>Overall status: <span style={getStatusBadgeStyle(agent1Review.overall_status)}>{agent1Review.overall_status}</span></p>
-            <p>
-              Overall score: <strong>{agent1Review.overall_score} / {agent1Review.overall_max_score}</strong>
-            </p>
+            <p>Overall score: <strong>{agent1Review.overall_score} / {agent1Review.overall_max_score}</strong></p>
             <div style={{ marginBottom: 12 }}>
               <ProgressBar value={agent1Review.overall_progress_percent} />
             </div>
             <p>Overall progress: <strong>{agent1Review.overall_progress_percent}%</strong></p>
-            <p>Reviewed documents: <strong>{agent1Review.reviewed_document_count}</strong> / Parsed documents: <strong>{agent1Review.parsed_document_count}</strong></p>
 
             <div
               style={{
@@ -681,21 +740,14 @@ export default function HomePage() {
               </div>
             </div>
 
-            <div style={{ display: "grid", gap: 16, marginTop: 16 }}>
+            <div style={{ display: "grid", gap: 16 }}>
               {filteredFindings.length === 0 ? (
                 <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 16 }}>
                   <p style={{ margin: 0 }}>No topics match the selected filters.</p>
                 </div>
               ) : (
                 filteredFindings.map((finding) => (
-                  <div
-                    key={finding.topic_id}
-                    style={{
-                      border: "1px solid #ddd",
-                      borderRadius: 8,
-                      padding: 16
-                    }}
-                  >
+                  <div key={finding.topic_id} style={{ border: "1px solid #ddd", borderRadius: 8, padding: 16 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
                       <h3 style={{ marginTop: 0, marginBottom: 0 }}>{finding.topic_name}</h3>
                       <span style={getStatusBadgeStyle(finding.status)}>{finding.status}</span>
@@ -712,54 +764,136 @@ export default function HomePage() {
 
                     <div style={{ marginTop: 12 }}>
                       <strong>Corrective Actions by Discipline</strong>
-                      {finding.corrective_actions.length === 0 ? (
-                        <p>No corrective actions.</p>
-                      ) : (
-                        <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 8 }}>
-                          <thead>
-                            <tr>
-                              <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Discipline</th>
-                              <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Priority</th>
-                              <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Action</th>
-                              <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Reason</th>
+                      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 8 }}>
+                        <thead>
+                          <tr>
+                            <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Discipline</th>
+                            <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Priority</th>
+                            <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Action</th>
+                            <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Reason</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {finding.corrective_actions.map((action, index) => (
+                            <tr key={`${finding.topic_id}-action-${index}`}>
+                              <td style={{ padding: "10px 0", verticalAlign: "top" }}>{action.discipline}</td>
+                              <td style={{ padding: "10px 0", verticalAlign: "top" }}>
+                                <span style={getPriorityBadgeStyle(action.priority)}>{action.priority}</span>
+                              </td>
+                              <td style={{ padding: "10px 0", verticalAlign: "top" }}>{action.action}</td>
+                              <td style={{ padding: "10px 0", verticalAlign: "top" }}>{action.reason}</td>
                             </tr>
-                          </thead>
-                          <tbody>
-                            {finding.corrective_actions.map((action, index) => (
-                              <tr key={`${finding.topic_id}-action-${index}`}>
-                                <td style={{ padding: "10px 0", verticalAlign: "top" }}>{action.discipline}</td>
-                                <td style={{ padding: "10px 0", verticalAlign: "top" }}>
-                                  <span style={getPriorityBadgeStyle(action.priority)}>{action.priority}</span>
-                                </td>
-                                <td style={{ padding: "10px 0", verticalAlign: "top" }}>{action.action}</td>
-                                <td style={{ padding: "10px 0", verticalAlign: "top" }}>{action.reason}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      )}
-                    </div>
-
-                    {finding.evidences.length === 0 ? (
-                      <p style={{ marginTop: 16 }}>No evidence found.</p>
-                    ) : (
-                      <div style={{ marginTop: 16 }}>
-                        <strong>Evidence</strong>
-                        <ul style={{ marginTop: 8 }}>
-                          {finding.evidences.map((evidence, index) => (
-                            <li key={`${finding.topic_id}-${index}`} style={{ marginBottom: 10 }}>
-                              <div>
-                                <strong>{evidence.original_filename}</strong> — keyword: <strong>{evidence.keyword}</strong>
-                              </div>
-                              <div style={{ whiteSpace: "pre-wrap" }}>{evidence.snippet}</div>
-                            </li>
                           ))}
-                        </ul>
-                      </div>
-                    )}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 ))
               )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div style={{ padding: 16, border: "1px solid #ddd", borderRadius: 8, marginBottom: 24 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <h2 style={{ marginTop: 0, marginBottom: 0 }}>Agent 2 Energy Review</h2>
+          <button
+            type="button"
+            onClick={handleRunAgent2}
+            disabled={!selectedProjectId || runningAgent2}
+            style={{ padding: "8px 12px", borderRadius: 6, border: "1px solid #222", background: "#fff", cursor: "pointer" }}
+          >
+            {runningAgent2 ? "Refreshing..." : "Run Agent 2 Review"}
+          </button>
+        </div>
+
+        {!selectedProjectId ? (
+          <p style={{ marginTop: 16 }}>Select a project first.</p>
+        ) : !agent2Review ? (
+          <p style={{ marginTop: 16 }}>No energy review data yet.</p>
+        ) : (
+          <div style={{ marginTop: 16 }}>
+            <p>Project: <strong>{agent2Review.project_name}</strong></p>
+            <p>Overall status: <span style={getStatusBadgeStyle(agent2Review.overall_status)}>{agent2Review.overall_status}</span></p>
+            <p>Overall score: <strong>{agent2Review.overall_score} / {agent2Review.overall_max_score}</strong></p>
+            <div style={{ marginBottom: 12 }}>
+              <ProgressBar value={agent2Review.overall_progress_percent} />
+            </div>
+            <p>Overall progress: <strong>{agent2Review.overall_progress_percent}%</strong></p>
+            <p>Reviewed documents: <strong>{agent2Review.reviewed_document_count}</strong> / Parsed documents: <strong>{agent2Review.parsed_document_count}</strong></p>
+
+            <div style={{ display: "grid", gap: 16, marginTop: 16 }}>
+              {agent2Review.findings.map((finding) => (
+                <div key={finding.readiness_item_id} style={{ border: "1px solid #ddd", borderRadius: 8, padding: 16 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                    <h3 style={{ marginTop: 0, marginBottom: 0 }}>{finding.readiness_item_name}</h3>
+                    <span style={getStatusBadgeStyle(finding.status)}>{finding.status}</span>
+                  </div>
+
+                  <p style={{ marginTop: 12 }}>{finding.summary}</p>
+                  <p>Score: <strong>{finding.score} / {finding.max_score}</strong></p>
+                  <div style={{ marginBottom: 12 }}>
+                    <ProgressBar value={finding.progress_percent} />
+                  </div>
+                  <p>Progress: <strong>{finding.progress_percent}%</strong></p>
+                  <p>Evidence count: <strong>{finding.evidence_count}</strong></p>
+                  <p>Searched keywords: {finding.searched_keywords.join(", ")}</p>
+
+                  <div style={{ marginTop: 12 }}>
+                    <strong>Missing Inputs</strong>
+                    <ul style={{ marginTop: 8 }}>
+                      {finding.missing_inputs.map((item, index) => (
+                        <li key={`${finding.readiness_item_id}-missing-${index}`}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div style={{ marginTop: 12 }}>
+                    <strong>Corrective Actions by Discipline</strong>
+                    <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 8 }}>
+                      <thead>
+                        <tr>
+                          <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Discipline</th>
+                          <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Priority</th>
+                          <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Action</th>
+                          <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Reason</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {finding.corrective_actions.map((action, index) => (
+                          <tr key={`${finding.readiness_item_id}-action-${index}`}>
+                            <td style={{ padding: "10px 0", verticalAlign: "top" }}>{action.discipline}</td>
+                            <td style={{ padding: "10px 0", verticalAlign: "top" }}>
+                              <span style={getPriorityBadgeStyle(action.priority)}>{action.priority}</span>
+                            </td>
+                            <td style={{ padding: "10px 0", verticalAlign: "top" }}>{action.action}</td>
+                            <td style={{ padding: "10px 0", verticalAlign: "top" }}>{action.reason}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div style={{ marginTop: 16 }}>
+                    <strong>Evidence</strong>
+                    {finding.evidences.length === 0 ? (
+                      <p>No evidence found.</p>
+                    ) : (
+                      <ul style={{ marginTop: 8 }}>
+                        {finding.evidences.map((evidence, index) => (
+                          <li key={`${finding.readiness_item_id}-${index}`} style={{ marginBottom: 10 }}>
+                            <div>
+                              <strong>{evidence.original_filename}</strong> — keyword: <strong>{evidence.keyword}</strong>
+                            </div>
+                            <div style={{ whiteSpace: "pre-wrap" }}>{evidence.snippet}</div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}

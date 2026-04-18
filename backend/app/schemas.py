@@ -83,3 +83,30 @@ class Agent1ReviewResponse(BaseModel):
     reviewed_document_count: int
     parsed_document_count: int
     findings: list[ReviewFindingResponse]
+
+
+class EnergyFindingResponse(BaseModel):
+    readiness_item_id: str
+    readiness_item_name: str
+    status: str
+    score: int
+    max_score: int
+    progress_percent: int
+    evidence_count: int
+    searched_keywords: list[str]
+    summary: str
+    missing_inputs: list[str]
+    evidences: list[ReviewEvidenceItemResponse]
+    corrective_actions: list[CorrectiveActionResponse]
+
+
+class Agent2EnergyReviewResponse(BaseModel):
+    project_id: int
+    project_name: str
+    overall_status: str
+    overall_score: int
+    overall_max_score: int
+    overall_progress_percent: int
+    reviewed_document_count: int
+    parsed_document_count: int
+    findings: list[EnergyFindingResponse]
