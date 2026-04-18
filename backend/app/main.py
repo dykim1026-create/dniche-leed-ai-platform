@@ -29,6 +29,8 @@ from app.schemas import (
     Agent2EnergyReviewResponse,
     CarbonFindingResponse,
     Agent3CarbonReviewResponse,
+    LeedScoringFindingResponse,
+    Agent4LeedScoringResponse,
 )
 
 app = FastAPI(title="Dniche LEED AI Backend")
@@ -517,6 +519,185 @@ CARBON_ACTION_LIBRARY = {
             "discipline": "Sustainability",
             "action": "Define reporting approach for waste and construction-stage carbon measures.",
             "reason": "Consistent reporting is needed for review and documentation.",
+        },
+    ],
+}
+
+LEED_SCORING_ITEMS = [
+    {
+        "category_id": "integrative_process",
+        "category_name": "Integrative Process",
+        "max_points": 1,
+        "keywords": ["integrative", "basis of design", "owner project requirements", "water budget", "early analysis"],
+        "review_note": "Early-stage coordination and basis documents for LEED workflow.",
+        "required_documents": [
+            "Basis of Design",
+            "Owner Project Requirements",
+            "Early water or energy analysis summary",
+        ],
+    },
+    {
+        "category_id": "sustainable_sites",
+        "category_name": "Sustainable Sites",
+        "max_points": 10,
+        "keywords": ["site", "stormwater", "landscape", "heat island", "open space", "light pollution"],
+        "review_note": "Site-related documentation supporting sustainable site measures.",
+        "required_documents": [
+            "Site plan and landscape package",
+            "Stormwater strategy",
+            "Heat island / exterior lighting information",
+        ],
+    },
+    {
+        "category_id": "water_efficiency",
+        "category_name": "Water Efficiency",
+        "max_points": 11,
+        "keywords": ["water", "fixture", "flow rate", "irrigation", "gpm", "gpf"],
+        "review_note": "Indoor and outdoor water reduction support package.",
+        "required_documents": [
+            "Plumbing fixture schedule",
+            "Water calculation sheet",
+            "Irrigation / landscape water documentation",
+        ],
+    },
+    {
+        "category_id": "energy_atmosphere",
+        "category_name": "Energy & Atmosphere",
+        "max_points": 33,
+        "keywords": ["energy", "ashrae", "hvac", "lighting", "model", "commissioning"],
+        "review_note": "Energy modeling, system performance, and commissioning-related documentation.",
+        "required_documents": [
+            "Energy model narrative",
+            "HVAC and lighting input summary",
+            "Commissioning-related design information",
+        ],
+    },
+    {
+        "category_id": "materials_resources",
+        "category_name": "Materials & Resources",
+        "max_points": 13,
+        "keywords": ["material", "epd", "recycled", "waste", "lca", "product declaration"],
+        "review_note": "Material transparency, waste, and embodied carbon related documentation.",
+        "required_documents": [
+            "Material tracker",
+            "EPD / supplier declarations",
+            "Waste management strategy",
+        ],
+    },
+    {
+        "category_id": "indoor_environmental_quality",
+        "category_name": "Indoor Environmental Quality",
+        "max_points": 16,
+        "keywords": ["ventilation", "voc", "daylight", "iaq", "thermal comfort", "co2"],
+        "review_note": "Indoor environment and occupant comfort documentation package.",
+        "required_documents": [
+            "Ventilation basis",
+            "Low-emitting materials information",
+            "Daylight / comfort support documents",
+        ],
+    },
+    {
+        "category_id": "innovation",
+        "category_name": "Innovation / Regional Priority",
+        "max_points": 6,
+        "keywords": ["innovation", "pilot", "regional priority", "education", "exemplary"],
+        "review_note": "Innovation path and special LEED narrative readiness.",
+        "required_documents": [
+            "Innovation strategy memo",
+            "Potential pilot or exemplary narrative",
+            "Regional priority mapping note",
+        ],
+    },
+]
+
+LEED_ACTION_LIBRARY = {
+    "integrative_process": [
+        {
+            "discipline": "Sustainability",
+            "action": "Prepare integrative process memo and consolidate early design analyses.",
+            "reason": "LEED review needs traceable early-stage coordination evidence.",
+        },
+        {
+            "discipline": "Project Management",
+            "action": "Collect Basis of Design and Owner Project Requirements in one package.",
+            "reason": "Core project definition documents are required for structured submittal.",
+        },
+    ],
+    "sustainable_sites": [
+        {
+            "discipline": "Landscape",
+            "action": "Provide planting, irrigation, and open-space related drawings and schedules.",
+            "reason": "Landscape data supports multiple site-related credits.",
+        },
+        {
+            "discipline": "Civil / Site",
+            "action": "Provide stormwater and site strategy package.",
+            "reason": "Site documentation is needed for LEED site category review.",
+        },
+    ],
+    "water_efficiency": [
+        {
+            "discipline": "Plumbing",
+            "action": "Provide fixture flow/flush rates and water calculation support.",
+            "reason": "Indoor water reduction cannot be reviewed without plumbing data.",
+        },
+        {
+            "discipline": "Landscape",
+            "action": "Provide outdoor water reduction strategy and irrigation assumptions.",
+            "reason": "Outdoor water use must be documented separately.",
+        },
+    ],
+    "energy_atmosphere": [
+        {
+            "discipline": "Mechanical",
+            "action": "Provide HVAC narrative, efficiencies, zoning, and commissioning-related design inputs.",
+            "reason": "Mechanical design drives major LEED EA documentation.",
+        },
+        {
+            "discipline": "Electrical",
+            "action": "Provide lighting power density, controls, and major electrical load assumptions.",
+            "reason": "Lighting and electrical loads affect energy review and scoring.",
+        },
+        {
+            "discipline": "Sustainability",
+            "action": "Prepare energy model support package and LEED EA documentation matrix.",
+            "reason": "Scoring readiness depends on a coordinated documentation package.",
+        },
+    ],
+    "materials_resources": [
+        {
+            "discipline": "Procurement / Cost",
+            "action": "Collect EPDs, recycled content declarations, and supplier documents.",
+            "reason": "Material-related points depend on product documentation availability.",
+        },
+        {
+            "discipline": "Sustainability",
+            "action": "Prepare a materials compliance tracker and waste strategy summary.",
+            "reason": "LEED MR scoring requires organized evidence and package tracking.",
+        },
+    ],
+    "indoor_environmental_quality": [
+        {
+            "discipline": "Mechanical",
+            "action": "Provide ventilation calculations and IAQ strategy documents.",
+            "reason": "IEQ review depends on ventilation and indoor air quality evidence.",
+        },
+        {
+            "discipline": "Interior Design",
+            "action": "Provide low-emitting material specifications and finish schedules.",
+            "reason": "IEQ material credits require finish-level data.",
+        },
+    ],
+    "innovation": [
+        {
+            "discipline": "Sustainability",
+            "action": "Develop innovation credit opportunities and draft supporting narratives.",
+            "reason": "Innovation credits usually require explicit strategy and narrative preparation.",
+        },
+        {
+            "discipline": "Project Management",
+            "action": "Confirm whether any regional priority or pilot paths should be targeted.",
+            "reason": "Targeted strategy is needed before documentation can be assembled.",
         },
     ],
 }
@@ -1063,6 +1244,145 @@ def build_agent3_carbon_review(project_id: int, db: Session) -> Agent3CarbonRevi
     )
 
 
+def determine_leed_doc_status(total_count: int) -> str:
+    if total_count >= 3:
+        return "ready"
+    if total_count >= 1:
+        return "partial"
+    return "missing"
+
+
+def get_leed_estimated_points(status: str, max_points: int) -> int:
+    if status == "ready":
+        return max_points
+    if status == "partial":
+        partial = int(round(max_points * 0.4))
+        return max(1, partial) if max_points > 0 else 0
+    return 0
+
+
+def build_leed_corrective_actions(category_id: str, status: str):
+    base_actions = LEED_ACTION_LIBRARY.get(category_id, [])
+    priority = get_priority_for_status(status)
+
+    actions = []
+    for item in base_actions:
+        if status == "missing":
+            action_text = f"Immediately prepare: {item['action']}"
+            reason_text = f"{item['reason']} Current LEED documentation review found no usable evidence."
+        elif status == "partial":
+            action_text = f"Complete documentation: {item['action']}"
+            reason_text = f"{item['reason']} Current LEED documentation review found only partial evidence."
+        else:
+            action_text = f"Verify and organize: {item['action']}"
+            reason_text = f"{item['reason']} Evidence exists, but should be organized into submittal-ready format."
+        actions.append(
+            CorrectiveActionResponse(
+                discipline=item["discipline"],
+                priority=priority,
+                action=action_text,
+                reason=reason_text,
+            )
+        )
+    return actions
+
+
+def determine_leed_overall_status(findings: list[LeedScoringFindingResponse], parsed_document_count: int) -> str:
+    if parsed_document_count == 0:
+        return "insufficient_documents"
+
+    statuses = [finding.status for finding in findings]
+
+    if all(status == "ready" for status in statuses):
+        return "good_documentation_readiness"
+    if any(status in {"ready", "partial"} for status in statuses):
+        return "partial_documentation_readiness"
+    return "insufficient_documentation"
+
+
+def get_estimated_certification_band(points: int) -> str:
+    if points >= 80:
+        return "Platinum (starter estimate)"
+    if points >= 60:
+        return "Gold (starter estimate)"
+    if points >= 50:
+        return "Silver (starter estimate)"
+    if points >= 40:
+        return "Certified (starter estimate)"
+    return "Below Certified (starter estimate)"
+
+
+def build_agent4_leed_scoring(project_id: int, db: Session) -> Agent4LeedScoringResponse:
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    documents = (
+        db.query(Document)
+        .filter(Document.project_id == project_id)
+        .order_by(Document.id.desc())
+        .all()
+    )
+
+    parsed_documents = [
+        document
+        for document in documents
+        if document.parse_status == "parsed" and (document.extracted_text or "").strip()
+    ]
+
+    findings = []
+
+    for item in LEED_SCORING_ITEMS:
+        evidences, total_count = collect_topic_evidence(parsed_documents, item["keywords"])
+        status = determine_leed_doc_status(total_count)
+        estimated_points = get_leed_estimated_points(status, item["max_points"])
+        progress_percent = int((estimated_points / item["max_points"]) * 100) if item["max_points"] else 0
+        corrective_actions = build_leed_corrective_actions(item["category_id"], status)
+
+        missing_documents = item["required_documents"] if status == "missing" else (
+            item["required_documents"][1:] if status == "partial" and len(item["required_documents"]) > 1 else []
+        )
+
+        findings.append(
+            LeedScoringFindingResponse(
+                category_id=item["category_id"],
+                category_name=item["category_name"],
+                status=status,
+                estimated_points=estimated_points,
+                max_points=item["max_points"],
+                progress_percent=progress_percent,
+                evidence_count=total_count,
+                searched_keywords=item["keywords"],
+                review_note=item["review_note"],
+                required_documents=item["required_documents"],
+                missing_documents=missing_documents,
+                evidences=evidences,
+                corrective_actions=corrective_actions,
+            )
+        )
+
+    estimated_points = sum(finding.estimated_points for finding in findings)
+    total_possible_points = sum(finding.max_points for finding in findings)
+    overall_progress_percent = int((estimated_points / total_possible_points) * 100) if total_possible_points else 0
+    overall_status = determine_leed_overall_status(findings, len(parsed_documents))
+    estimated_certification_band = get_estimated_certification_band(estimated_points)
+
+    return Agent4LeedScoringResponse(
+        project_id=project.id,
+        project_name=project.name,
+        overall_status=overall_status,
+        estimated_points=estimated_points,
+        total_possible_points=total_possible_points,
+        overall_progress_percent=overall_progress_percent,
+        estimated_certification_band=estimated_certification_band,
+        target_certification="Gold",
+        method_note="This is a starter estimate based on document evidence coverage, not an official LEED certification result.",
+        reviewed_document_count=len(documents),
+        parsed_document_count=len(parsed_documents),
+        findings=findings,
+    )
+
+
 @app.get("/")
 def read_root():
     return {"message": "Backend is running"}
@@ -1329,3 +1649,8 @@ def run_agent2_energy_review(project_id: int, db: Session = Depends(get_db)):
 @app.get("/projects/{project_id}/agent3/carbon-review", response_model=Agent3CarbonReviewResponse)
 def run_agent3_carbon_review(project_id: int, db: Session = Depends(get_db)):
     return build_agent3_carbon_review(project_id, db)
+
+
+@app.get("/projects/{project_id}/agent4/leed-scoring", response_model=Agent4LeedScoringResponse)
+def run_agent4_leed_scoring(project_id: int, db: Session = Depends(get_db)):
+    return build_agent4_leed_scoring(project_id, db)

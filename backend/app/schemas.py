@@ -138,3 +138,34 @@ class Agent3CarbonReviewResponse(BaseModel):
     reviewed_document_count: int
     parsed_document_count: int
     findings: list[CarbonFindingResponse]
+
+
+class LeedScoringFindingResponse(BaseModel):
+    category_id: str
+    category_name: str
+    status: str
+    estimated_points: int
+    max_points: int
+    progress_percent: int
+    evidence_count: int
+    searched_keywords: list[str]
+    review_note: str
+    required_documents: list[str]
+    missing_documents: list[str]
+    evidences: list[ReviewEvidenceItemResponse]
+    corrective_actions: list[CorrectiveActionResponse]
+
+
+class Agent4LeedScoringResponse(BaseModel):
+    project_id: int
+    project_name: str
+    overall_status: str
+    estimated_points: int
+    total_possible_points: int
+    overall_progress_percent: int
+    estimated_certification_band: str
+    target_certification: str
+    method_note: str
+    reviewed_document_count: int
+    parsed_document_count: int
+    findings: list[LeedScoringFindingResponse]

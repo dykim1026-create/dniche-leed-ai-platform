@@ -123,6 +123,37 @@ type Agent3CarbonReview = {
   findings: CarbonFinding[];
 };
 
+type LeedScoringFinding = {
+  category_id: string;
+  category_name: string;
+  status: string;
+  estimated_points: number;
+  max_points: number;
+  progress_percent: number;
+  evidence_count: number;
+  searched_keywords: string[];
+  review_note: string;
+  required_documents: string[];
+  missing_documents: string[];
+  evidences: ReviewEvidenceItem[];
+  corrective_actions: CorrectiveAction[];
+};
+
+type Agent4LeedScoring = {
+  project_id: number;
+  project_name: string;
+  overall_status: string;
+  estimated_points: number;
+  total_possible_points: number;
+  overall_progress_percent: number;
+  estimated_certification_band: string;
+  target_certification: string;
+  method_note: string;
+  reviewed_document_count: number;
+  parsed_document_count: number;
+  findings: LeedScoringFinding[];
+};
+
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8001";
 
@@ -155,7 +186,7 @@ function ProgressBar({ value }: { value: number }) {
 }
 
 function getStatusBadgeStyle(status: string): React.CSSProperties {
-  if (["evidence_found", "good_initial_coverage", "ready", "ready_for_simulation", "ready_for_carbon_assessment"].includes(status)) {
+  if (["evidence_found", "good_initial_coverage", "ready", "ready_for_simulation", "ready_for_carbon_assessment", "good_documentation_readiness"].includes(status)) {
     return {
       display: "inline-block",
       padding: "4px 10px",
@@ -167,7 +198,7 @@ function getStatusBadgeStyle(status: string): React.CSSProperties {
     };
   }
 
-  if (["limited_evidence", "partial_coverage", "partial", "partial_readiness"].includes(status)) {
+  if (["limited_evidence", "partial_coverage", "partial", "partial_readiness", "partial_documentation_readiness"].includes(status)) {
     return {
       display: "inline-block",
       padding: "4px 10px",
@@ -179,7 +210,7 @@ function getStatusBadgeStyle(status: string): React.CSSProperties {
     };
   }
 
-  if (["no_evidence", "insufficient_evidence", "insufficient_documents", "missing", "not_ready"].includes(status)) {
+  if (["no_evidence", "insufficient_evidence", "insufficient_documents", "missing", "not_ready", "insufficient_documentation"].includes(status)) {
     return {
       display: "inline-block",
       padding: "4px 10px",
@@ -261,6 +292,7 @@ export default function HomePage() {
   const [agent1Review, setAgent1Review] = useState<Agent1Review | null>(null);
   const [agent2Review, setAgent2Review] = useState<Agent2EnergyReview | null>(null);
   const [agent3Review, setAgent3Review] = useState<Agent3CarbonReview | null>(null);
+  const [agent4Review, setAgent4Review] = useState<Agent4LeedScoring | null>(null);
   const [loading, setLoading] = useState(true);
   const [submittingProject, setSubmittingProject] = useState(false);
   const [submittingDocument, setSubmittingDocument] = useState(false);
@@ -268,6 +300,7 @@ export default function HomePage() {
   const [runningAgent1, setRunningAgent1] = useState(false);
   const [runningAgent2, setRunningAgent2] = useState(false);
   const [runningAgent3, setRunningAgent3] = useState(false);
+  const [runningAgent4, setRunningAgent4] = useState(false);
   const [topicStatusFilter, setTopicStatusFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [error, setError] = useState("");
@@ -351,6 +384,20 @@ export default function HomePage() {
     setAgent3Review(data);
   }
 
+  async function loadAgent4Review(projectId: string) {
+    if (!projectId) {
+      setAgent4Review(null);
+      return;
+    }
+
+    const res = await fetch(`${API_BASE_URL}/projects/${projectId}/agent4/leed-scoring`);
+    if (!res.ok) {
+      throw new Error("Failed to load Agent 4 review");
+    }
+    const data = await res.json();
+    setAgent4Review(data);
+  }
+
   useEffect(() => {
     async function initialize() {
       try {
@@ -377,11 +424,13 @@ export default function HomePage() {
       loadAgent1Review(selectedProjectId).catch(console.error);
       loadAgent2Review(selectedProjectId).catch(console.error);
       loadAgent3Review(selectedProjectId).catch(console.error);
+      loadAgent4Review(selectedProjectId).catch(console.error);
     } else {
       setDocuments([]);
       setAgent1Review(null);
       setAgent2Review(null);
       setAgent3Review(null);
+      setAgent4Review(null);
     }
   }, [selectedProjectId]);
 
@@ -486,6 +535,7 @@ export default function HomePage() {
       await loadAgent1Review(selectedProjectId);
       await loadAgent2Review(selectedProjectId);
       await loadAgent3Review(selectedProjectId);
+      await loadAgent4Review(selectedProjectId);
     } catch (err) {
       setUploadMessage("Failed to upload document.");
       console.error(err);
@@ -512,6 +562,7 @@ export default function HomePage() {
         await loadAgent1Review(selectedProjectId);
         await loadAgent2Review(selectedProjectId);
         await loadAgent3Review(selectedProjectId);
+        await loadAgent4Review(selectedProjectId);
       }
     } catch (err) {
       setUploadMessage("Failed to parse document.");
@@ -569,6 +620,23 @@ export default function HomePage() {
       console.error(err);
     } finally {
       setRunningAgent3(false);
+    }
+  }
+
+  async function handleRunAgent4() {
+    if (!selectedProjectId) {
+      setUploadMessage("Please select a project first.");
+      return;
+    }
+
+    try {
+      setRunningAgent4(true);
+      await loadAgent4Review(selectedProjectId);
+    } catch (err) {
+      setUploadMessage("Failed to run Agent 4 review.");
+      console.error(err);
+    } finally {
+      setRunningAgent4(false);
     }
   }
 
@@ -816,7 +884,6 @@ export default function HomePage() {
                   <div style={{ marginBottom: 12 }}>
                     <ProgressBar value={finding.progress_percent} />
                   </div>
-                  <p>Progress: <strong>{finding.progress_percent}%</strong></p>
                 </div>
               ))}
             </div>
@@ -849,23 +916,6 @@ export default function HomePage() {
             <div style={{ marginBottom: 12 }}>
               <ProgressBar value={agent2Review.overall_progress_percent} />
             </div>
-            <p>Overall progress: <strong>{agent2Review.overall_progress_percent}%</strong></p>
-
-            <div style={{ display: "grid", gap: 16, marginTop: 16 }}>
-              {agent2Review.findings.map((finding) => (
-                <div key={finding.readiness_item_id} style={{ border: "1px solid #ddd", borderRadius: 8, padding: 16 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                    <h3 style={{ marginTop: 0, marginBottom: 0 }}>{finding.readiness_item_name}</h3>
-                    <span style={getStatusBadgeStyle(finding.status)}>{finding.status}</span>
-                  </div>
-                  <p style={{ marginTop: 12 }}>{finding.summary}</p>
-                  <p>Score: <strong>{finding.score} / {finding.max_score}</strong></p>
-                  <div style={{ marginBottom: 12 }}>
-                    <ProgressBar value={finding.progress_percent} />
-                  </div>
-                </div>
-              ))}
-            </div>
           </div>
         )}
       </div>
@@ -895,19 +945,50 @@ export default function HomePage() {
             <div style={{ marginBottom: 12 }}>
               <ProgressBar value={agent3Review.overall_progress_percent} />
             </div>
-            <p>Overall progress: <strong>{agent3Review.overall_progress_percent}%</strong></p>
-            <p>Reviewed documents: <strong>{agent3Review.reviewed_document_count}</strong> / Parsed documents: <strong>{agent3Review.parsed_document_count}</strong></p>
+          </div>
+        )}
+      </div>
+
+      <div style={{ padding: 16, border: "1px solid #ddd", borderRadius: 8, marginBottom: 24 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <h2 style={{ marginTop: 0, marginBottom: 0 }}>Agent 4 LEED Scoring & Documentation</h2>
+          <button
+            type="button"
+            onClick={handleRunAgent4}
+            disabled={!selectedProjectId || runningAgent4}
+            style={{ padding: "8px 12px", borderRadius: 6, border: "1px solid #222", background: "#fff", cursor: "pointer" }}
+          >
+            {runningAgent4 ? "Refreshing..." : "Run Agent 4 Review"}
+          </button>
+        </div>
+
+        {!selectedProjectId ? (
+          <p style={{ marginTop: 16 }}>Select a project first.</p>
+        ) : !agent4Review ? (
+          <p style={{ marginTop: 16 }}>No LEED scoring data yet.</p>
+        ) : (
+          <div style={{ marginTop: 16 }}>
+            <p>Project: <strong>{agent4Review.project_name}</strong></p>
+            <p>Overall status: <span style={getStatusBadgeStyle(agent4Review.overall_status)}>{agent4Review.overall_status}</span></p>
+            <p>Estimated points: <strong>{agent4Review.estimated_points} / {agent4Review.total_possible_points}</strong></p>
+            <div style={{ marginBottom: 12 }}>
+              <ProgressBar value={agent4Review.overall_progress_percent} />
+            </div>
+            <p>Overall progress: <strong>{agent4Review.overall_progress_percent}%</strong></p>
+            <p>Estimated certification band: <strong>{agent4Review.estimated_certification_band}</strong></p>
+            <p>Target certification: <strong>{agent4Review.target_certification}</strong></p>
+            <p>{agent4Review.method_note}</p>
 
             <div style={{ display: "grid", gap: 16, marginTop: 16 }}>
-              {agent3Review.findings.map((finding) => (
-                <div key={finding.carbon_item_id} style={{ border: "1px solid #ddd", borderRadius: 8, padding: 16 }}>
+              {agent4Review.findings.map((finding) => (
+                <div key={finding.category_id} style={{ border: "1px solid #ddd", borderRadius: 8, padding: 16 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                    <h3 style={{ marginTop: 0, marginBottom: 0 }}>{finding.carbon_item_name}</h3>
+                    <h3 style={{ marginTop: 0, marginBottom: 0 }}>{finding.category_name}</h3>
                     <span style={getStatusBadgeStyle(finding.status)}>{finding.status}</span>
                   </div>
 
-                  <p style={{ marginTop: 12 }}>{finding.summary}</p>
-                  <p>Score: <strong>{finding.score} / {finding.max_score}</strong></p>
+                  <p style={{ marginTop: 12 }}>{finding.review_note}</p>
+                  <p>Estimated points: <strong>{finding.estimated_points} / {finding.max_points}</strong></p>
                   <div style={{ marginBottom: 12 }}>
                     <ProgressBar value={finding.progress_percent} />
                   </div>
@@ -916,21 +997,25 @@ export default function HomePage() {
                   <p>Searched keywords: {finding.searched_keywords.join(", ")}</p>
 
                   <div style={{ marginTop: 12 }}>
-                    <strong>Missing Inputs</strong>
+                    <strong>Required Documents</strong>
                     <ul style={{ marginTop: 8 }}>
-                      {finding.missing_inputs.map((item, index) => (
-                        <li key={`${finding.carbon_item_id}-missing-${index}`}>{item}</li>
+                      {finding.required_documents.map((doc, index) => (
+                        <li key={`${finding.category_id}-req-${index}`}>{doc}</li>
                       ))}
                     </ul>
                   </div>
 
                   <div style={{ marginTop: 12 }}>
-                    <strong>Decarbonization Actions</strong>
-                    <ul style={{ marginTop: 8 }}>
-                      {finding.decarbonization_actions.map((item, index) => (
-                        <li key={`${finding.carbon_item_id}-decarb-${index}`}>{item}</li>
-                      ))}
-                    </ul>
+                    <strong>Missing Documents</strong>
+                    {finding.missing_documents.length === 0 ? (
+                      <p>No major missing documents identified for starter review.</p>
+                    ) : (
+                      <ul style={{ marginTop: 8 }}>
+                        {finding.missing_documents.map((doc, index) => (
+                          <li key={`${finding.category_id}-miss-${index}`}>{doc}</li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
 
                   <div style={{ marginTop: 12 }}>
@@ -946,7 +1031,7 @@ export default function HomePage() {
                       </thead>
                       <tbody>
                         {finding.corrective_actions.map((action, index) => (
-                          <tr key={`${finding.carbon_item_id}-action-${index}`}>
+                          <tr key={`${finding.category_id}-action-${index}`}>
                             <td style={{ padding: "10px 0", verticalAlign: "top" }}>{action.discipline}</td>
                             <td style={{ padding: "10px 0", verticalAlign: "top" }}>
                               <span style={getPriorityBadgeStyle(action.priority)}>{action.priority}</span>
@@ -966,7 +1051,7 @@ export default function HomePage() {
                     ) : (
                       <ul style={{ marginTop: 8 }}>
                         {finding.evidences.map((evidence, index) => (
-                          <li key={`${finding.carbon_item_id}-${index}`} style={{ marginBottom: 10 }}>
+                          <li key={`${finding.category_id}-${index}`} style={{ marginBottom: 10 }}>
                             <div>
                               <strong>{evidence.original_filename}</strong> — keyword: <strong>{evidence.keyword}</strong>
                             </div>
