@@ -354,6 +354,14 @@ def determine_finding_status(total_count: int) -> str:
     return "no_evidence"
 
 
+def get_topic_score(status: str) -> int:
+    if status == "evidence_found":
+        return 100
+    if status == "limited_evidence":
+        return 50
+    return 0
+
+
 def determine_overall_status(findings: list[ReviewFindingResponse], parsed_document_count: int) -> str:
     if parsed_document_count == 0:
         return "insufficient_documents"
@@ -610,12 +618,18 @@ def run_agent1_review(project_id: int, db: Session = Depends(get_db)):
         evidences, total_count = collect_topic_evidence(parsed_documents, topic["keywords"])
         status = determine_finding_status(total_count)
         corrective_actions = build_corrective_actions(topic["topic_id"], status)
+        score = get_topic_score(status)
+        max_score = 100
+        progress_percent = score
 
         findings.append(
             ReviewFindingResponse(
                 topic_id=topic["topic_id"],
                 topic_name=topic["topic_name"],
                 status=status,
+                score=score,
+                max_score=max_score,
+                progress_percent=progress_percent,
                 evidence_count=total_count,
                 searched_keywords=topic["keywords"],
                 recommendation=topic["recommendation"],
@@ -625,11 +639,17 @@ def run_agent1_review(project_id: int, db: Session = Depends(get_db)):
         )
 
     overall_status = determine_overall_status(findings, len(parsed_documents))
+    overall_score = sum(finding.score for finding in findings)
+    overall_max_score = sum(finding.max_score for finding in findings) if findings else 0
+    overall_progress_percent = int((overall_score / overall_max_score) * 100) if overall_max_score else 0
 
     return Agent1ReviewResponse(
         project_id=project.id,
         project_name=project.name,
         overall_status=overall_status,
+        overall_score=overall_score,
+        overall_max_score=overall_max_score,
+        overall_progress_percent=overall_progress_percent,
         reviewed_document_count=len(documents),
         parsed_document_count=len(parsed_documents),
         findings=findings,

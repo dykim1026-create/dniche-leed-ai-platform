@@ -46,6 +46,9 @@ type ReviewFinding = {
   topic_id: string;
   topic_name: string;
   status: string;
+  score: number;
+  max_score: number;
+  progress_percent: number;
   evidence_count: number;
   searched_keywords: string[];
   recommendation: string;
@@ -57,6 +60,9 @@ type Agent1Review = {
   project_id: number;
   project_name: string;
   overall_status: string;
+  overall_score: number;
+  overall_max_score: number;
+  overall_progress_percent: number;
   reviewed_document_count: number;
   parsed_document_count: number;
   findings: ReviewFinding[];
@@ -68,6 +74,29 @@ const API_BASE_URL =
 function getPreview(text: string | null, limit = 240) {
   if (!text) return "-";
   return text.length > limit ? `${text.slice(0, limit)}...` : text;
+}
+
+function ProgressBar({ value }: { value: number }) {
+  return (
+    <div
+      style={{
+        width: "100%",
+        height: 12,
+        border: "1px solid #ccc",
+        borderRadius: 999,
+        overflow: "hidden",
+        background: "#f5f5f5"
+      }}
+    >
+      <div
+        style={{
+          width: `${Math.max(0, Math.min(100, value))}%`,
+          height: "100%",
+          background: "#222"
+        }}
+      />
+    </div>
+  );
 }
 
 export default function HomePage() {
@@ -468,6 +497,13 @@ export default function HomePage() {
           <div style={{ marginTop: 16 }}>
             <p>Project: <strong>{agent1Review.project_name}</strong></p>
             <p>Overall status: <strong>{agent1Review.overall_status}</strong></p>
+            <p>
+              Overall score: <strong>{agent1Review.overall_score} / {agent1Review.overall_max_score}</strong>
+            </p>
+            <div style={{ marginBottom: 12 }}>
+              <ProgressBar value={agent1Review.overall_progress_percent} />
+            </div>
+            <p>Overall progress: <strong>{agent1Review.overall_progress_percent}%</strong></p>
             <p>Reviewed documents: <strong>{agent1Review.reviewed_document_count}</strong> / Parsed documents: <strong>{agent1Review.parsed_document_count}</strong></p>
 
             <div style={{ display: "grid", gap: 16, marginTop: 16 }}>
@@ -482,6 +518,11 @@ export default function HomePage() {
                 >
                   <h3 style={{ marginTop: 0 }}>{finding.topic_name}</h3>
                   <p>Status: <strong>{finding.status}</strong></p>
+                  <p>Score: <strong>{finding.score} / {finding.max_score}</strong></p>
+                  <div style={{ marginBottom: 12 }}>
+                    <ProgressBar value={finding.progress_percent} />
+                  </div>
+                  <p>Progress: <strong>{finding.progress_percent}%</strong></p>
                   <p>Evidence count: <strong>{finding.evidence_count}</strong></p>
                   <p>Searched keywords: {finding.searched_keywords.join(", ")}</p>
                   <p>Recommendation: {finding.recommendation}</p>
