@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type Project = {
   id: number;
@@ -99,6 +99,102 @@ function ProgressBar({ value }: { value: number }) {
   );
 }
 
+function getStatusBadgeStyle(status: string): React.CSSProperties {
+  if (status === "evidence_found") {
+    return {
+      display: "inline-block",
+      padding: "4px 10px",
+      borderRadius: 999,
+      background: "#e8f7ee",
+      border: "1px solid #96d5ab",
+      color: "#1f6b3a",
+      fontWeight: 600
+    };
+  }
+
+  if (status === "limited_evidence") {
+    return {
+      display: "inline-block",
+      padding: "4px 10px",
+      borderRadius: 999,
+      background: "#fff7e6",
+      border: "1px solid #f0c36d",
+      color: "#8a5a00",
+      fontWeight: 600
+    };
+  }
+
+  if (status === "no_evidence") {
+    return {
+      display: "inline-block",
+      padding: "4px 10px",
+      borderRadius: 999,
+      background: "#fdecec",
+      border: "1px solid #ef9a9a",
+      color: "#a12626",
+      fontWeight: 600
+    };
+  }
+
+  return {
+    display: "inline-block",
+    padding: "4px 10px",
+    borderRadius: 999,
+    background: "#f2f2f2",
+    border: "1px solid #ccc",
+    color: "#333",
+    fontWeight: 600
+  };
+}
+
+function getPriorityBadgeStyle(priority: string): React.CSSProperties {
+  if (priority === "high") {
+    return {
+      display: "inline-block",
+      padding: "4px 10px",
+      borderRadius: 999,
+      background: "#fdecec",
+      border: "1px solid #ef9a9a",
+      color: "#a12626",
+      fontWeight: 600
+    };
+  }
+
+  if (priority === "medium") {
+    return {
+      display: "inline-block",
+      padding: "4px 10px",
+      borderRadius: 999,
+      background: "#fff7e6",
+      border: "1px solid #f0c36d",
+      color: "#8a5a00",
+      fontWeight: 600
+    };
+  }
+
+  if (priority === "low") {
+    return {
+      display: "inline-block",
+      padding: "4px 10px",
+      borderRadius: 999,
+      background: "#e8f7ee",
+      border: "1px solid #96d5ab",
+      color: "#1f6b3a",
+      fontWeight: 600
+    };
+  }
+
+  return {
+    display: "inline-block",
+    padding: "4px 10px",
+    borderRadius: 999,
+    background: "#f2f2f2",
+    border: "1px solid #ccc",
+    color: "#333",
+    fontWeight: 600
+  };
+}
+
 export default function HomePage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
@@ -113,6 +209,8 @@ export default function HomePage() {
   const [submittingDocument, setSubmittingDocument] = useState(false);
   const [parsingDocumentId, setParsingDocumentId] = useState<number | null>(null);
   const [runningAgent1, setRunningAgent1] = useState(false);
+  const [topicStatusFilter, setTopicStatusFilter] = useState("all");
+  const [priorityFilter, setPriorityFilter] = useState("all");
   const [error, setError] = useState("");
   const [uploadMessage, setUploadMessage] = useState("");
 
@@ -197,6 +295,23 @@ export default function HomePage() {
       setAgent1Review(null);
     }
   }, [selectedProjectId]);
+
+  const filteredFindings = useMemo(() => {
+    if (!agent1Review) return [];
+
+    return agent1Review.findings.filter((finding) => {
+      const statusMatch =
+        topicStatusFilter === "all" || finding.status === topicStatusFilter;
+
+      const priorityMatch =
+        priorityFilter === "all" ||
+        finding.corrective_actions.some(
+          (action) => action.priority === priorityFilter
+        );
+
+      return statusMatch && priorityMatch;
+    });
+  }, [agent1Review, topicStatusFilter, priorityFilter]);
 
   async function handleProjectSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -496,7 +611,7 @@ export default function HomePage() {
         ) : (
           <div style={{ marginTop: 16 }}>
             <p>Project: <strong>{agent1Review.project_name}</strong></p>
-            <p>Overall status: <strong>{agent1Review.overall_status}</strong></p>
+            <p>Overall status: <span style={getStatusBadgeStyle(agent1Review.overall_status)}>{agent1Review.overall_status}</span></p>
             <p>
               Overall score: <strong>{agent1Review.overall_score} / {agent1Review.overall_max_score}</strong>
             </p>
@@ -506,74 +621,123 @@ export default function HomePage() {
             <p>Overall progress: <strong>{agent1Review.overall_progress_percent}%</strong></p>
             <p>Reviewed documents: <strong>{agent1Review.reviewed_document_count}</strong> / Parsed documents: <strong>{agent1Review.parsed_document_count}</strong></p>
 
-            <div style={{ display: "grid", gap: 16, marginTop: 16 }}>
-              {agent1Review.findings.map((finding) => (
-                <div
-                  key={finding.topic_id}
-                  style={{
-                    border: "1px solid #ddd",
-                    borderRadius: 8,
-                    padding: 16
-                  }}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                gap: 12,
+                marginTop: 20,
+                marginBottom: 20
+              }}
+            >
+              <div>
+                <label style={{ display: "block", marginBottom: 6 }}>Filter by topic status</label>
+                <select
+                  value={topicStatusFilter}
+                  onChange={(e) => setTopicStatusFilter(e.target.value)}
+                  style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 6 }}
                 >
-                  <h3 style={{ marginTop: 0 }}>{finding.topic_name}</h3>
-                  <p>Status: <strong>{finding.status}</strong></p>
-                  <p>Score: <strong>{finding.score} / {finding.max_score}</strong></p>
-                  <div style={{ marginBottom: 12 }}>
-                    <ProgressBar value={finding.progress_percent} />
-                  </div>
-                  <p>Progress: <strong>{finding.progress_percent}%</strong></p>
-                  <p>Evidence count: <strong>{finding.evidence_count}</strong></p>
-                  <p>Searched keywords: {finding.searched_keywords.join(", ")}</p>
-                  <p>Recommendation: {finding.recommendation}</p>
+                  <option value="all">All statuses</option>
+                  <option value="no_evidence">No evidence</option>
+                  <option value="limited_evidence">Limited evidence</option>
+                  <option value="evidence_found">Evidence found</option>
+                </select>
+              </div>
 
-                  <div style={{ marginTop: 12 }}>
-                    <strong>Corrective Actions by Discipline</strong>
-                    {finding.corrective_actions.length === 0 ? (
-                      <p>No corrective actions.</p>
-                    ) : (
-                      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 8 }}>
-                        <thead>
-                          <tr>
-                            <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Discipline</th>
-                            <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Priority</th>
-                            <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Action</th>
-                            <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Reason</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {finding.corrective_actions.map((action, index) => (
-                            <tr key={`${finding.topic_id}-action-${index}`}>
-                              <td style={{ padding: "10px 0", verticalAlign: "top" }}>{action.discipline}</td>
-                              <td style={{ padding: "10px 0", verticalAlign: "top" }}>{action.priority}</td>
-                              <td style={{ padding: "10px 0", verticalAlign: "top" }}>{action.action}</td>
-                              <td style={{ padding: "10px 0", verticalAlign: "top" }}>{action.reason}</td>
+              <div>
+                <label style={{ display: "block", marginBottom: 6 }}>Filter by priority</label>
+                <select
+                  value={priorityFilter}
+                  onChange={(e) => setPriorityFilter(e.target.value)}
+                  style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 6 }}
+                >
+                  <option value="all">All priorities</option>
+                  <option value="high">High</option>
+                  <option value="medium">Medium</option>
+                  <option value="low">Low</option>
+                </select>
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gap: 16, marginTop: 16 }}>
+              {filteredFindings.length === 0 ? (
+                <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 16 }}>
+                  <p style={{ margin: 0 }}>No topics match the selected filters.</p>
+                </div>
+              ) : (
+                filteredFindings.map((finding) => (
+                  <div
+                    key={finding.topic_id}
+                    style={{
+                      border: "1px solid #ddd",
+                      borderRadius: 8,
+                      padding: 16
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                      <h3 style={{ marginTop: 0, marginBottom: 0 }}>{finding.topic_name}</h3>
+                      <span style={getStatusBadgeStyle(finding.status)}>{finding.status}</span>
+                    </div>
+
+                    <p style={{ marginTop: 12 }}>Score: <strong>{finding.score} / {finding.max_score}</strong></p>
+                    <div style={{ marginBottom: 12 }}>
+                      <ProgressBar value={finding.progress_percent} />
+                    </div>
+                    <p>Progress: <strong>{finding.progress_percent}%</strong></p>
+                    <p>Evidence count: <strong>{finding.evidence_count}</strong></p>
+                    <p>Searched keywords: {finding.searched_keywords.join(", ")}</p>
+                    <p>Recommendation: {finding.recommendation}</p>
+
+                    <div style={{ marginTop: 12 }}>
+                      <strong>Corrective Actions by Discipline</strong>
+                      {finding.corrective_actions.length === 0 ? (
+                        <p>No corrective actions.</p>
+                      ) : (
+                        <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 8 }}>
+                          <thead>
+                            <tr>
+                              <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Discipline</th>
+                              <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Priority</th>
+                              <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Action</th>
+                              <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Reason</th>
                             </tr>
+                          </thead>
+                          <tbody>
+                            {finding.corrective_actions.map((action, index) => (
+                              <tr key={`${finding.topic_id}-action-${index}`}>
+                                <td style={{ padding: "10px 0", verticalAlign: "top" }}>{action.discipline}</td>
+                                <td style={{ padding: "10px 0", verticalAlign: "top" }}>
+                                  <span style={getPriorityBadgeStyle(action.priority)}>{action.priority}</span>
+                                </td>
+                                <td style={{ padding: "10px 0", verticalAlign: "top" }}>{action.action}</td>
+                                <td style={{ padding: "10px 0", verticalAlign: "top" }}>{action.reason}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+
+                    {finding.evidences.length === 0 ? (
+                      <p style={{ marginTop: 16 }}>No evidence found.</p>
+                    ) : (
+                      <div style={{ marginTop: 16 }}>
+                        <strong>Evidence</strong>
+                        <ul style={{ marginTop: 8 }}>
+                          {finding.evidences.map((evidence, index) => (
+                            <li key={`${finding.topic_id}-${index}`} style={{ marginBottom: 10 }}>
+                              <div>
+                                <strong>{evidence.original_filename}</strong> — keyword: <strong>{evidence.keyword}</strong>
+                              </div>
+                              <div style={{ whiteSpace: "pre-wrap" }}>{evidence.snippet}</div>
+                            </li>
                           ))}
-                        </tbody>
-                      </table>
+                        </ul>
+                      </div>
                     )}
                   </div>
-
-                  {finding.evidences.length === 0 ? (
-                    <p style={{ marginTop: 16 }}>No evidence found.</p>
-                  ) : (
-                    <div style={{ marginTop: 16 }}>
-                      <strong>Evidence</strong>
-                      <ul style={{ marginTop: 8 }}>
-                        {finding.evidences.map((evidence, index) => (
-                          <li key={`${finding.topic_id}-${index}`} style={{ marginBottom: 10 }}>
-                            <div>
-                              <strong>{evidence.original_filename}</strong> — keyword: <strong>{evidence.keyword}</strong>
-                            </div>
-                            <div style={{ whiteSpace: "pre-wrap" }}>{evidence.snippet}</div>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         )}
