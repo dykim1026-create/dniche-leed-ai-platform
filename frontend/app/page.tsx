@@ -100,7 +100,7 @@ function ProgressBar({ value }: { value: number }) {
 }
 
 function getStatusBadgeStyle(status: string): React.CSSProperties {
-  if (status === "evidence_found") {
+  if (status === "evidence_found" || status === "good_initial_coverage") {
     return {
       display: "inline-block",
       padding: "4px 10px",
@@ -112,7 +112,7 @@ function getStatusBadgeStyle(status: string): React.CSSProperties {
     };
   }
 
-  if (status === "limited_evidence") {
+  if (status === "limited_evidence" || status === "partial_coverage") {
     return {
       display: "inline-block",
       padding: "4px 10px",
@@ -124,7 +124,7 @@ function getStatusBadgeStyle(status: string): React.CSSProperties {
     };
   }
 
-  if (status === "no_evidence") {
+  if (status === "no_evidence" || status === "insufficient_evidence" || status === "insufficient_documents") {
     return {
       display: "inline-block",
       padding: "4px 10px",
@@ -445,6 +445,18 @@ export default function HomePage() {
     }
   }
 
+  function handleExportCsv() {
+    if (!selectedProjectId) {
+      setUploadMessage("Please select a project first.");
+      return;
+    }
+
+    window.open(
+      `${API_BASE_URL}/projects/${selectedProjectId}/agent1/export.csv`,
+      "_blank"
+    );
+  }
+
   return (
     <main style={{ maxWidth: 1200, margin: "0 auto" }}>
       <h1>Dniche LEED AI Platform</h1>
@@ -592,16 +604,26 @@ export default function HomePage() {
       </div>
 
       <div style={{ padding: 16, border: "1px solid #ddd", borderRadius: 8, marginBottom: 24 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <h2 style={{ marginTop: 0, marginBottom: 0 }}>Agent 1 Review</h2>
-          <button
-            type="button"
-            onClick={handleRunAgent1}
-            disabled={!selectedProjectId || runningAgent1}
-            style={{ padding: "8px 12px", borderRadius: 6, border: "1px solid #222", background: "#fff", cursor: "pointer" }}
-          >
-            {runningAgent1 ? "Refreshing..." : "Run Agent 1 Review"}
-          </button>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={handleExportCsv}
+              disabled={!selectedProjectId}
+              style={{ padding: "8px 12px", borderRadius: 6, border: "1px solid #222", background: "#fff", cursor: "pointer" }}
+            >
+              Export CSV
+            </button>
+            <button
+              type="button"
+              onClick={handleRunAgent1}
+              disabled={!selectedProjectId || runningAgent1}
+              style={{ padding: "8px 12px", borderRadius: 6, border: "1px solid #222", background: "#fff", cursor: "pointer" }}
+            >
+              {runningAgent1 ? "Refreshing..." : "Run Agent 1 Review"}
+            </button>
+          </div>
         </div>
 
         {!selectedProjectId ? (

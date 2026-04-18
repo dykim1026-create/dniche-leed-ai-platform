@@ -7,6 +7,7 @@ from io import StringIO
 
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from pypdf import PdfReader
@@ -411,6 +412,68 @@ def build_corrective_actions(topic_id: str, status: str):
     return corrective_actions
 
 
+def build_agent1_review(project_id: int, db: Session) -> Agent1ReviewResponse:
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    documents = (
+        db.query(Document)
+        .filter(Document.project_id == project_id)
+        .order_by(Document.id.desc())
+        .all()
+    )
+
+    parsed_documents = [
+        document
+        for document in documents
+        if document.parse_status == "parsed" and (document.extracted_text or "").strip()
+    ]
+
+    findings = []
+
+    for topic in REVIEW_TOPICS:
+        evidences, total_count = collect_topic_evidence(parsed_documents, topic["keywords"])
+        status = determine_finding_status(total_count)
+        corrective_actions = build_corrective_actions(topic["topic_id"], status)
+        score = get_topic_score(status)
+        max_score = 100
+        progress_percent = score
+
+        findings.append(
+            ReviewFindingResponse(
+                topic_id=topic["topic_id"],
+                topic_name=topic["topic_name"],
+                status=status,
+                score=score,
+                max_score=max_score,
+                progress_percent=progress_percent,
+                evidence_count=total_count,
+                searched_keywords=topic["keywords"],
+                recommendation=topic["recommendation"],
+                evidences=evidences,
+                corrective_actions=corrective_actions,
+            )
+        )
+
+    overall_status = determine_overall_status(findings, len(parsed_documents))
+    overall_score = sum(finding.score for finding in findings)
+    overall_max_score = sum(finding.max_score for finding in findings) if findings else 0
+    overall_progress_percent = int((overall_score / overall_max_score) * 100) if overall_max_score else 0
+
+    return Agent1ReviewResponse(
+        project_id=project.id,
+        project_name=project.name,
+        overall_status=overall_status,
+        overall_score=overall_score,
+        overall_max_score=overall_max_score,
+        overall_progress_percent=overall_progress_percent,
+        reviewed_document_count=len(documents),
+        parsed_document_count=len(parsed_documents),
+        findings=findings,
+    )
+
+
 @app.get("/")
 def read_root():
     return {"message": "Backend is running"}
@@ -595,62 +658,81 @@ def search_project_documents(
 
 @app.get("/projects/{project_id}/agent1/review", response_model=Agent1ReviewResponse)
 def run_agent1_review(project_id: int, db: Session = Depends(get_db)):
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    return build_agent1_review(project_id, db)
 
-    documents = (
-        db.query(Document)
-        .filter(Document.project_id == project_id)
-        .order_by(Document.id.desc())
-        .all()
-    )
 
-    parsed_documents = [
-        document
-        for document in documents
-        if document.parse_status == "parsed" and (document.extracted_text or "").strip()
-    ]
+@app.get("/projects/{project_id}/agent1/export.csv")
+def export_agent1_review_csv(project_id: int, db: Session = Depends(get_db)):
+    review = build_agent1_review(project_id, db)
 
-    findings = []
+    output = StringIO()
+    writer = csv.writer(output)
 
-    for topic in REVIEW_TOPICS:
-        evidences, total_count = collect_topic_evidence(parsed_documents, topic["keywords"])
-        status = determine_finding_status(total_count)
-        corrective_actions = build_corrective_actions(topic["topic_id"], status)
-        score = get_topic_score(status)
-        max_score = 100
-        progress_percent = score
+    writer.writerow(["Project ID", review.project_id])
+    writer.writerow(["Project Name", review.project_name])
+    writer.writerow(["Overall Status", review.overall_status])
+    writer.writerow(["Overall Score", f"{review.overall_score}/{review.overall_max_score}"])
+    writer.writerow(["Overall Progress", f"{review.overall_progress_percent}%"])
+    writer.writerow(["Reviewed Document Count", review.reviewed_document_count])
+    writer.writerow(["Parsed Document Count", review.parsed_document_count])
+    writer.writerow([])
 
-        findings.append(
-            ReviewFindingResponse(
-                topic_id=topic["topic_id"],
-                topic_name=topic["topic_name"],
-                status=status,
-                score=score,
-                max_score=max_score,
-                progress_percent=progress_percent,
-                evidence_count=total_count,
-                searched_keywords=topic["keywords"],
-                recommendation=topic["recommendation"],
-                evidences=evidences,
-                corrective_actions=corrective_actions,
-            )
+    writer.writerow([
+        "Topic ID",
+        "Topic Name",
+        "Status",
+        "Score",
+        "Max Score",
+        "Progress Percent",
+        "Evidence Count",
+        "Searched Keywords",
+        "Recommendation",
+        "Discipline",
+        "Priority",
+        "Corrective Action",
+        "Reason",
+        "Evidence Document",
+        "Evidence Keyword",
+        "Evidence Snippet",
+    ])
+
+    for finding in review.findings:
+        max_rows = max(
+            1,
+            len(finding.corrective_actions),
+            len(finding.evidences),
         )
 
-    overall_status = determine_overall_status(findings, len(parsed_documents))
-    overall_score = sum(finding.score for finding in findings)
-    overall_max_score = sum(finding.max_score for finding in findings) if findings else 0
-    overall_progress_percent = int((overall_score / overall_max_score) * 100) if overall_max_score else 0
+        for i in range(max_rows):
+            corrective_action = finding.corrective_actions[i] if i < len(finding.corrective_actions) else None
+            evidence = finding.evidences[i] if i < len(finding.evidences) else None
 
-    return Agent1ReviewResponse(
-        project_id=project.id,
-        project_name=project.name,
-        overall_status=overall_status,
-        overall_score=overall_score,
-        overall_max_score=overall_max_score,
-        overall_progress_percent=overall_progress_percent,
-        reviewed_document_count=len(documents),
-        parsed_document_count=len(parsed_documents),
-        findings=findings,
+            writer.writerow([
+                finding.topic_id if i == 0 else "",
+                finding.topic_name if i == 0 else "",
+                finding.status if i == 0 else "",
+                finding.score if i == 0 else "",
+                finding.max_score if i == 0 else "",
+                finding.progress_percent if i == 0 else "",
+                finding.evidence_count if i == 0 else "",
+                ", ".join(finding.searched_keywords) if i == 0 else "",
+                finding.recommendation if i == 0 else "",
+                corrective_action.discipline if corrective_action else "",
+                corrective_action.priority if corrective_action else "",
+                corrective_action.action if corrective_action else "",
+                corrective_action.reason if corrective_action else "",
+                evidence.original_filename if evidence else "",
+                evidence.keyword if evidence else "",
+                evidence.snippet if evidence else "",
+            ])
+
+    output.seek(0)
+    filename = f"agent1_review_project_{review.project_id}.csv"
+
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        },
     )
