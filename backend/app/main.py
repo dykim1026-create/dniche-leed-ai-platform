@@ -27,6 +27,8 @@ from app.schemas import (
     Agent1ReviewResponse,
     EnergyFindingResponse,
     Agent2EnergyReviewResponse,
+    CarbonFindingResponse,
+    Agent3CarbonReviewResponse,
 )
 
 app = FastAPI(title="Dniche LEED AI Backend")
@@ -345,6 +347,180 @@ ENERGY_ACTION_LIBRARY = {
     ],
 }
 
+CARBON_READINESS_ITEMS = [
+    {
+        "carbon_item_id": "structural_materials",
+        "carbon_item_name": "Structural Materials",
+        "keywords": ["concrete", "steel", "cement", "rebar", "tonnage", "mix"],
+        "summary": "Structural material quantities and low-carbon opportunities.",
+        "missing_inputs": [
+            "Concrete volumes or mix classes",
+            "Steel tonnage or section schedule",
+            "Low-carbon structural alternatives",
+        ],
+        "decarbonization_actions": [
+            "Review lower-cement concrete mixes",
+            "Review recycled steel sourcing options",
+            "Prioritize high-volume structural packages first",
+        ],
+    },
+    {
+        "carbon_item_id": "envelope_materials",
+        "carbon_item_name": "Envelope Materials",
+        "keywords": ["facade", "cladding", "insulation", "glazing", "aluminum", "envelope"],
+        "summary": "Envelope product inputs affecting embodied carbon.",
+        "missing_inputs": [
+            "Facade system quantities",
+            "Insulation and glazing specifications",
+            "Alternative low-carbon envelope options",
+        ],
+        "decarbonization_actions": [
+            "Compare façade material alternatives",
+            "Review insulation product declarations",
+            "Assess glazing specification optimization",
+        ],
+    },
+    {
+        "carbon_item_id": "interior_finishes",
+        "carbon_item_name": "Interior Finishes",
+        "keywords": ["finish", "gypsum", "tile", "paint", "carpet", "ceiling"],
+        "summary": "Interior finish package data for embodied carbon review.",
+        "missing_inputs": [
+            "Finish schedules",
+            "Material quantities by area/type",
+            "Product substitution options",
+        ],
+        "decarbonization_actions": [
+            "Identify high-volume interior finish packages",
+            "Review lower-impact finish alternatives",
+            "Collect finish product declarations",
+        ],
+    },
+    {
+        "carbon_item_id": "epd_and_transparency",
+        "carbon_item_name": "EPD / Product Transparency",
+        "keywords": ["epd", "environmental product declaration", "product declaration", "iso 14025"],
+        "summary": "Availability of EPD and transparency evidence.",
+        "missing_inputs": [
+            "EPD documents for priority products",
+            "Supplier sustainability declarations",
+            "Product-level transparency tracker",
+        ],
+        "decarbonization_actions": [
+            "Prioritize EPD collection for major materials",
+            "Create an EPD tracker by package",
+            "Engage suppliers on missing declarations",
+        ],
+    },
+    {
+        "carbon_item_id": "lca_inputs",
+        "carbon_item_name": "LCA Inputs / Quantity Takeoff",
+        "keywords": ["lca", "quantity takeoff", "boq", "quantity", "material schedule", "takeoff"],
+        "summary": "Quantity and scope inputs required for embodied carbon assessment.",
+        "missing_inputs": [
+            "BOQ or quantity takeoff",
+            "Scope boundaries for assessment",
+            "Package-level quantity breakdown",
+        ],
+        "decarbonization_actions": [
+            "Prepare quantity takeoff for major materials",
+            "Define assessment scope and boundaries",
+            "Map quantities to material categories",
+        ],
+    },
+    {
+        "carbon_item_id": "construction_and_waste",
+        "carbon_item_name": "Construction / Waste Strategy",
+        "keywords": ["waste", "construction waste", "recycling", "diversion", "site waste"],
+        "summary": "Construction and waste-related carbon reduction readiness.",
+        "missing_inputs": [
+            "Waste management assumptions",
+            "Recycling/diversion strategy",
+            "Construction carbon reduction measures",
+        ],
+        "decarbonization_actions": [
+            "Prepare waste diversion plan",
+            "Review recycled content opportunities",
+            "Coordinate site waste reporting expectations",
+        ],
+    },
+]
+
+CARBON_ACTION_LIBRARY = {
+    "structural_materials": [
+        {
+            "discipline": "Structure",
+            "action": "Provide structural material quantities, concrete mix data, and steel tonnage.",
+            "reason": "Structural packages usually dominate embodied carbon.",
+        },
+        {
+            "discipline": "Sustainability",
+            "action": "Prepare an embodied carbon hotspot summary for structural packages.",
+            "reason": "Carbon reduction should focus first on high-impact structural elements.",
+        },
+    ],
+    "envelope_materials": [
+        {
+            "discipline": "Architecture",
+            "action": "Provide façade, glazing, insulation, and cladding specifications with quantities where possible.",
+            "reason": "Envelope materials can significantly affect embodied carbon outcomes.",
+        },
+        {
+            "discipline": "Sustainability",
+            "action": "Compare alternative envelope products for lower-carbon options.",
+            "reason": "Envelope substitutions may create decarbonization opportunities.",
+        },
+    ],
+    "interior_finishes": [
+        {
+            "discipline": "Interior Design",
+            "action": "Provide finish schedules and identify high-volume finish categories.",
+            "reason": "Finish selections can be optimized early for lower-carbon alternatives.",
+        },
+        {
+            "discipline": "Procurement / Cost",
+            "action": "Check supplier availability of lower-carbon finish products.",
+            "reason": "Alternative product selection depends on supply chain options.",
+        },
+    ],
+    "epd_and_transparency": [
+        {
+            "discipline": "Procurement / Cost",
+            "action": "Collect EPDs and supplier declarations for priority products.",
+            "reason": "Carbon documentation depends on supplier transparency data.",
+        },
+        {
+            "discipline": "Sustainability",
+            "action": "Maintain an EPD / transparency compliance register.",
+            "reason": "A structured tracker is needed for carbon reporting and LEED alignment.",
+        },
+    ],
+    "lca_inputs": [
+        {
+            "discipline": "Quantity Surveyor",
+            "action": "Prepare BOQ-aligned quantity takeoff for major material categories.",
+            "reason": "LCA cannot proceed reliably without quantity inputs.",
+        },
+        {
+            "discipline": "Sustainability",
+            "action": "Define LCA scope, system boundary, and assessment assumptions.",
+            "reason": "Carbon calculations require explicit scope definitions.",
+        },
+    ],
+    "construction_and_waste": [
+        {
+            "discipline": "Contractor / Construction",
+            "action": "Prepare waste diversion and construction-stage reduction strategy.",
+            "reason": "Construction practices influence waste-related carbon reduction outcomes.",
+        },
+        {
+            "discipline": "Sustainability",
+            "action": "Define reporting approach for waste and construction-stage carbon measures.",
+            "reason": "Consistent reporting is needed for review and documentation.",
+        },
+    ],
+}
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -548,9 +724,9 @@ def determine_finding_status(total_count: int) -> str:
 
 
 def get_topic_score(status: str) -> int:
-    if status == "evidence_found":
+    if status in {"evidence_found", "ready"}:
         return 100
-    if status == "limited_evidence":
+    if status in {"limited_evidence", "partial"}:
         return 50
     return 0
 
@@ -674,14 +850,6 @@ def determine_energy_status(total_count: int) -> str:
     return "missing"
 
 
-def get_energy_score(status: str) -> int:
-    if status == "ready":
-        return 100
-    if status == "partial":
-        return 50
-    return 0
-
-
 def build_energy_corrective_actions(readiness_item_id: str, status: str):
     base_actions = ENERGY_ACTION_LIBRARY.get(readiness_item_id, [])
     priority = get_priority_for_status(status)
@@ -744,7 +912,7 @@ def build_agent2_energy_review(project_id: int, db: Session) -> Agent2EnergyRevi
     for item in ENERGY_READINESS_ITEMS:
         evidences, total_count = collect_topic_evidence(parsed_documents, item["keywords"])
         status = determine_energy_status(total_count)
-        score = get_energy_score(status)
+        score = get_topic_score(status)
         max_score = 100
         progress_percent = score
         corrective_actions = build_energy_corrective_actions(item["readiness_item_id"], status)
@@ -772,6 +940,117 @@ def build_agent2_energy_review(project_id: int, db: Session) -> Agent2EnergyRevi
     overall_progress_percent = int((overall_score / overall_max_score) * 100) if overall_max_score else 0
 
     return Agent2EnergyReviewResponse(
+        project_id=project.id,
+        project_name=project.name,
+        overall_status=overall_status,
+        overall_score=overall_score,
+        overall_max_score=overall_max_score,
+        overall_progress_percent=overall_progress_percent,
+        reviewed_document_count=len(documents),
+        parsed_document_count=len(parsed_documents),
+        findings=findings,
+    )
+
+
+def determine_carbon_status(total_count: int) -> str:
+    if total_count >= 3:
+        return "ready"
+    if total_count >= 1:
+        return "partial"
+    return "missing"
+
+
+def build_carbon_corrective_actions(carbon_item_id: str, status: str):
+    base_actions = CARBON_ACTION_LIBRARY.get(carbon_item_id, [])
+    priority = get_priority_for_status(status)
+
+    actions = []
+    for item in base_actions:
+        if status == "missing":
+            action_text = f"Immediately provide: {item['action']}"
+            reason_text = f"{item['reason']} Current carbon readiness review found no usable evidence."
+        elif status == "partial":
+            action_text = f"Complete carbon inputs: {item['action']}"
+            reason_text = f"{item['reason']} Current carbon readiness review found only partial evidence."
+        else:
+            action_text = f"Validate decarbonization input: {item['action']}"
+            reason_text = f"{item['reason']} Evidence exists, but should be checked before carbon assessment."
+        actions.append(
+            CorrectiveActionResponse(
+                discipline=item["discipline"],
+                priority=priority,
+                action=action_text,
+                reason=reason_text,
+            )
+        )
+    return actions
+
+
+def determine_carbon_overall_status(findings: list[CarbonFindingResponse], parsed_document_count: int) -> str:
+    if parsed_document_count == 0:
+        return "insufficient_documents"
+
+    statuses = [finding.status for finding in findings]
+
+    if all(status == "ready" for status in statuses):
+        return "ready_for_carbon_assessment"
+    if any(status in {"ready", "partial"} for status in statuses):
+        return "partial_readiness"
+    return "not_ready"
+
+
+def build_agent3_carbon_review(project_id: int, db: Session) -> Agent3CarbonReviewResponse:
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    documents = (
+        db.query(Document)
+        .filter(Document.project_id == project_id)
+        .order_by(Document.id.desc())
+        .all()
+    )
+
+    parsed_documents = [
+        document
+        for document in documents
+        if document.parse_status == "parsed" and (document.extracted_text or "").strip()
+    ]
+
+    findings = []
+
+    for item in CARBON_READINESS_ITEMS:
+        evidences, total_count = collect_topic_evidence(parsed_documents, item["keywords"])
+        status = determine_carbon_status(total_count)
+        score = get_topic_score(status)
+        max_score = 100
+        progress_percent = score
+        corrective_actions = build_carbon_corrective_actions(item["carbon_item_id"], status)
+
+        findings.append(
+            CarbonFindingResponse(
+                carbon_item_id=item["carbon_item_id"],
+                carbon_item_name=item["carbon_item_name"],
+                status=status,
+                score=score,
+                max_score=max_score,
+                progress_percent=progress_percent,
+                evidence_count=total_count,
+                searched_keywords=item["keywords"],
+                summary=item["summary"],
+                missing_inputs=item["missing_inputs"],
+                decarbonization_actions=item["decarbonization_actions"],
+                evidences=evidences,
+                corrective_actions=corrective_actions,
+            )
+        )
+
+    overall_status = determine_carbon_overall_status(findings, len(parsed_documents))
+    overall_score = sum(finding.score for finding in findings)
+    overall_max_score = sum(finding.max_score for finding in findings) if findings else 0
+    overall_progress_percent = int((overall_score / overall_max_score) * 100) if overall_max_score else 0
+
+    return Agent3CarbonReviewResponse(
         project_id=project.id,
         project_name=project.name,
         overall_status=overall_status,
@@ -1045,3 +1324,8 @@ def export_agent1_review_csv(project_id: int, db: Session = Depends(get_db)):
 @app.get("/projects/{project_id}/agent2/energy-review", response_model=Agent2EnergyReviewResponse)
 def run_agent2_energy_review(project_id: int, db: Session = Depends(get_db)):
     return build_agent2_energy_review(project_id, db)
+
+
+@app.get("/projects/{project_id}/agent3/carbon-review", response_model=Agent3CarbonReviewResponse)
+def run_agent3_carbon_review(project_id: int, db: Session = Depends(get_db)):
+    return build_agent3_carbon_review(project_id, db)

@@ -95,6 +95,34 @@ type Agent2EnergyReview = {
   findings: EnergyFinding[];
 };
 
+type CarbonFinding = {
+  carbon_item_id: string;
+  carbon_item_name: string;
+  status: string;
+  score: number;
+  max_score: number;
+  progress_percent: number;
+  evidence_count: number;
+  searched_keywords: string[];
+  summary: string;
+  missing_inputs: string[];
+  decarbonization_actions: string[];
+  evidences: ReviewEvidenceItem[];
+  corrective_actions: CorrectiveAction[];
+};
+
+type Agent3CarbonReview = {
+  project_id: number;
+  project_name: string;
+  overall_status: string;
+  overall_score: number;
+  overall_max_score: number;
+  overall_progress_percent: number;
+  reviewed_document_count: number;
+  parsed_document_count: number;
+  findings: CarbonFinding[];
+};
+
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8001";
 
@@ -127,7 +155,7 @@ function ProgressBar({ value }: { value: number }) {
 }
 
 function getStatusBadgeStyle(status: string): React.CSSProperties {
-  if (["evidence_found", "good_initial_coverage", "ready", "ready_for_simulation"].includes(status)) {
+  if (["evidence_found", "good_initial_coverage", "ready", "ready_for_simulation", "ready_for_carbon_assessment"].includes(status)) {
     return {
       display: "inline-block",
       padding: "4px 10px",
@@ -232,12 +260,14 @@ export default function HomePage() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [agent1Review, setAgent1Review] = useState<Agent1Review | null>(null);
   const [agent2Review, setAgent2Review] = useState<Agent2EnergyReview | null>(null);
+  const [agent3Review, setAgent3Review] = useState<Agent3CarbonReview | null>(null);
   const [loading, setLoading] = useState(true);
   const [submittingProject, setSubmittingProject] = useState(false);
   const [submittingDocument, setSubmittingDocument] = useState(false);
   const [parsingDocumentId, setParsingDocumentId] = useState<number | null>(null);
   const [runningAgent1, setRunningAgent1] = useState(false);
   const [runningAgent2, setRunningAgent2] = useState(false);
+  const [runningAgent3, setRunningAgent3] = useState(false);
   const [topicStatusFilter, setTopicStatusFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [error, setError] = useState("");
@@ -307,6 +337,20 @@ export default function HomePage() {
     setAgent2Review(data);
   }
 
+  async function loadAgent3Review(projectId: string) {
+    if (!projectId) {
+      setAgent3Review(null);
+      return;
+    }
+
+    const res = await fetch(`${API_BASE_URL}/projects/${projectId}/agent3/carbon-review`);
+    if (!res.ok) {
+      throw new Error("Failed to load Agent 3 review");
+    }
+    const data = await res.json();
+    setAgent3Review(data);
+  }
+
   useEffect(() => {
     async function initialize() {
       try {
@@ -332,10 +376,12 @@ export default function HomePage() {
       });
       loadAgent1Review(selectedProjectId).catch(console.error);
       loadAgent2Review(selectedProjectId).catch(console.error);
+      loadAgent3Review(selectedProjectId).catch(console.error);
     } else {
       setDocuments([]);
       setAgent1Review(null);
       setAgent2Review(null);
+      setAgent3Review(null);
     }
   }, [selectedProjectId]);
 
@@ -439,6 +485,7 @@ export default function HomePage() {
       await loadDocuments(selectedProjectId);
       await loadAgent1Review(selectedProjectId);
       await loadAgent2Review(selectedProjectId);
+      await loadAgent3Review(selectedProjectId);
     } catch (err) {
       setUploadMessage("Failed to upload document.");
       console.error(err);
@@ -464,6 +511,7 @@ export default function HomePage() {
         await loadDocuments(selectedProjectId);
         await loadAgent1Review(selectedProjectId);
         await loadAgent2Review(selectedProjectId);
+        await loadAgent3Review(selectedProjectId);
       }
     } catch (err) {
       setUploadMessage("Failed to parse document.");
@@ -504,6 +552,23 @@ export default function HomePage() {
       console.error(err);
     } finally {
       setRunningAgent2(false);
+    }
+  }
+
+  async function handleRunAgent3() {
+    if (!selectedProjectId) {
+      setUploadMessage("Please select a project first.");
+      return;
+    }
+
+    try {
+      setRunningAgent3(true);
+      await loadAgent3Review(selectedProjectId);
+    } catch (err) {
+      setUploadMessage("Failed to run Agent 3 review.");
+      console.error(err);
+    } finally {
+      setRunningAgent3(false);
     }
   }
 
@@ -741,55 +806,19 @@ export default function HomePage() {
             </div>
 
             <div style={{ display: "grid", gap: 16 }}>
-              {filteredFindings.length === 0 ? (
-                <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 16 }}>
-                  <p style={{ margin: 0 }}>No topics match the selected filters.</p>
-                </div>
-              ) : (
-                filteredFindings.map((finding) => (
-                  <div key={finding.topic_id} style={{ border: "1px solid #ddd", borderRadius: 8, padding: 16 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                      <h3 style={{ marginTop: 0, marginBottom: 0 }}>{finding.topic_name}</h3>
-                      <span style={getStatusBadgeStyle(finding.status)}>{finding.status}</span>
-                    </div>
-
-                    <p style={{ marginTop: 12 }}>Score: <strong>{finding.score} / {finding.max_score}</strong></p>
-                    <div style={{ marginBottom: 12 }}>
-                      <ProgressBar value={finding.progress_percent} />
-                    </div>
-                    <p>Progress: <strong>{finding.progress_percent}%</strong></p>
-                    <p>Evidence count: <strong>{finding.evidence_count}</strong></p>
-                    <p>Searched keywords: {finding.searched_keywords.join(", ")}</p>
-                    <p>Recommendation: {finding.recommendation}</p>
-
-                    <div style={{ marginTop: 12 }}>
-                      <strong>Corrective Actions by Discipline</strong>
-                      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 8 }}>
-                        <thead>
-                          <tr>
-                            <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Discipline</th>
-                            <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Priority</th>
-                            <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Action</th>
-                            <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Reason</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {finding.corrective_actions.map((action, index) => (
-                            <tr key={`${finding.topic_id}-action-${index}`}>
-                              <td style={{ padding: "10px 0", verticalAlign: "top" }}>{action.discipline}</td>
-                              <td style={{ padding: "10px 0", verticalAlign: "top" }}>
-                                <span style={getPriorityBadgeStyle(action.priority)}>{action.priority}</span>
-                              </td>
-                              <td style={{ padding: "10px 0", verticalAlign: "top" }}>{action.action}</td>
-                              <td style={{ padding: "10px 0", verticalAlign: "top" }}>{action.reason}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+              {filteredFindings.map((finding) => (
+                <div key={finding.topic_id} style={{ border: "1px solid #ddd", borderRadius: 8, padding: 16 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                    <h3 style={{ marginTop: 0, marginBottom: 0 }}>{finding.topic_name}</h3>
+                    <span style={getStatusBadgeStyle(finding.status)}>{finding.status}</span>
                   </div>
-                ))
-              )}
+                  <p style={{ marginTop: 12 }}>Score: <strong>{finding.score} / {finding.max_score}</strong></p>
+                  <div style={{ marginBottom: 12 }}>
+                    <ProgressBar value={finding.progress_percent} />
+                  </div>
+                  <p>Progress: <strong>{finding.progress_percent}%</strong></p>
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -821,13 +850,59 @@ export default function HomePage() {
               <ProgressBar value={agent2Review.overall_progress_percent} />
             </div>
             <p>Overall progress: <strong>{agent2Review.overall_progress_percent}%</strong></p>
-            <p>Reviewed documents: <strong>{agent2Review.reviewed_document_count}</strong> / Parsed documents: <strong>{agent2Review.parsed_document_count}</strong></p>
 
             <div style={{ display: "grid", gap: 16, marginTop: 16 }}>
               {agent2Review.findings.map((finding) => (
                 <div key={finding.readiness_item_id} style={{ border: "1px solid #ddd", borderRadius: 8, padding: 16 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
                     <h3 style={{ marginTop: 0, marginBottom: 0 }}>{finding.readiness_item_name}</h3>
+                    <span style={getStatusBadgeStyle(finding.status)}>{finding.status}</span>
+                  </div>
+                  <p style={{ marginTop: 12 }}>{finding.summary}</p>
+                  <p>Score: <strong>{finding.score} / {finding.max_score}</strong></p>
+                  <div style={{ marginBottom: 12 }}>
+                    <ProgressBar value={finding.progress_percent} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div style={{ padding: 16, border: "1px solid #ddd", borderRadius: 8, marginBottom: 24 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <h2 style={{ marginTop: 0, marginBottom: 0 }}>Agent 3 Carbon Review</h2>
+          <button
+            type="button"
+            onClick={handleRunAgent3}
+            disabled={!selectedProjectId || runningAgent3}
+            style={{ padding: "8px 12px", borderRadius: 6, border: "1px solid #222", background: "#fff", cursor: "pointer" }}
+          >
+            {runningAgent3 ? "Refreshing..." : "Run Agent 3 Review"}
+          </button>
+        </div>
+
+        {!selectedProjectId ? (
+          <p style={{ marginTop: 16 }}>Select a project first.</p>
+        ) : !agent3Review ? (
+          <p style={{ marginTop: 16 }}>No carbon review data yet.</p>
+        ) : (
+          <div style={{ marginTop: 16 }}>
+            <p>Project: <strong>{agent3Review.project_name}</strong></p>
+            <p>Overall status: <span style={getStatusBadgeStyle(agent3Review.overall_status)}>{agent3Review.overall_status}</span></p>
+            <p>Overall score: <strong>{agent3Review.overall_score} / {agent3Review.overall_max_score}</strong></p>
+            <div style={{ marginBottom: 12 }}>
+              <ProgressBar value={agent3Review.overall_progress_percent} />
+            </div>
+            <p>Overall progress: <strong>{agent3Review.overall_progress_percent}%</strong></p>
+            <p>Reviewed documents: <strong>{agent3Review.reviewed_document_count}</strong> / Parsed documents: <strong>{agent3Review.parsed_document_count}</strong></p>
+
+            <div style={{ display: "grid", gap: 16, marginTop: 16 }}>
+              {agent3Review.findings.map((finding) => (
+                <div key={finding.carbon_item_id} style={{ border: "1px solid #ddd", borderRadius: 8, padding: 16 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                    <h3 style={{ marginTop: 0, marginBottom: 0 }}>{finding.carbon_item_name}</h3>
                     <span style={getStatusBadgeStyle(finding.status)}>{finding.status}</span>
                   </div>
 
@@ -844,7 +919,16 @@ export default function HomePage() {
                     <strong>Missing Inputs</strong>
                     <ul style={{ marginTop: 8 }}>
                       {finding.missing_inputs.map((item, index) => (
-                        <li key={`${finding.readiness_item_id}-missing-${index}`}>{item}</li>
+                        <li key={`${finding.carbon_item_id}-missing-${index}`}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div style={{ marginTop: 12 }}>
+                    <strong>Decarbonization Actions</strong>
+                    <ul style={{ marginTop: 8 }}>
+                      {finding.decarbonization_actions.map((item, index) => (
+                        <li key={`${finding.carbon_item_id}-decarb-${index}`}>{item}</li>
                       ))}
                     </ul>
                   </div>
@@ -862,7 +946,7 @@ export default function HomePage() {
                       </thead>
                       <tbody>
                         {finding.corrective_actions.map((action, index) => (
-                          <tr key={`${finding.readiness_item_id}-action-${index}`}>
+                          <tr key={`${finding.carbon_item_id}-action-${index}`}>
                             <td style={{ padding: "10px 0", verticalAlign: "top" }}>{action.discipline}</td>
                             <td style={{ padding: "10px 0", verticalAlign: "top" }}>
                               <span style={getPriorityBadgeStyle(action.priority)}>{action.priority}</span>
@@ -882,7 +966,7 @@ export default function HomePage() {
                     ) : (
                       <ul style={{ marginTop: 8 }}>
                         {finding.evidences.map((evidence, index) => (
-                          <li key={`${finding.readiness_item_id}-${index}`} style={{ marginBottom: 10 }}>
+                          <li key={`${finding.carbon_item_id}-${index}`} style={{ marginBottom: 10 }}>
                             <div>
                               <strong>{evidence.original_filename}</strong> — keyword: <strong>{evidence.keyword}</strong>
                             </div>
