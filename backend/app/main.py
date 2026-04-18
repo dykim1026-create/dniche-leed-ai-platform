@@ -5,7 +5,7 @@ import json
 import csv
 from io import StringIO
 
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, File
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -15,7 +15,12 @@ from openpyxl import load_workbook
 
 from app.db import Base, engine, SessionLocal
 from app.models import Project, Document
-from app.schemas import ProjectCreate, ProjectResponse, DocumentResponse
+from app.schemas import (
+    ProjectCreate,
+    ProjectResponse,
+    DocumentResponse,
+    DocumentSearchResultResponse,
+)
 
 app = FastAPI(title="Dniche LEED AI Backend")
 
@@ -166,6 +171,30 @@ def parse_supported_file(document: Document) -> tuple[str, str | None, str | Non
         return "failed", f"Parsing failed: {str(e)}", None
 
 
+def build_snippet(source_text: str, query: str, radius: int = 120) -> str:
+    if not source_text:
+        return ""
+
+    lower_source = source_text.lower()
+    lower_query = query.lower()
+    index = lower_source.find(lower_query)
+
+    if index == -1:
+        snippet = source_text[: radius * 2]
+        return snippet.strip()
+
+    start = max(0, index - radius)
+    end = min(len(source_text), index + len(query) + radius)
+    snippet = source_text[start:end].strip()
+
+    if start > 0:
+        snippet = "..." + snippet
+    if end < len(source_text):
+        snippet = snippet + "..."
+
+    return snippet
+
+
 @app.get("/")
 def read_root():
     return {"message": "Backend is running"}
@@ -288,3 +317,61 @@ def parse_document(document_id: int, db: Session = Depends(get_db)):
     db.refresh(document)
 
     return document
+
+
+@app.get(
+    "/projects/{project_id}/documents/search",
+    response_model=list[DocumentSearchResultResponse],
+)
+def search_project_documents(
+    project_id: int,
+    query: str = Query(..., min_length=1),
+    limit: int = Query(10, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    normalized_query = query.strip().lower()
+    if not normalized_query:
+        raise HTTPException(status_code=400, detail="Query must not be empty")
+
+    documents = (
+        db.query(Document)
+        .filter(Document.project_id == project_id)
+        .order_by(Document.id.desc())
+        .all()
+    )
+
+    results = []
+
+    for document in documents:
+        filename = document.original_filename or ""
+        extracted_text = document.extracted_text or ""
+
+        filename_count = filename.lower().count(normalized_query)
+        text_count = extracted_text.lower().count(normalized_query)
+        total_count = filename_count + text_count
+
+        if total_count == 0:
+            continue
+
+        matched_field = "extracted_text" if text_count >= filename_count and text_count > 0 else "original_filename"
+        snippet_source = extracted_text if matched_field == "extracted_text" else filename
+        snippet = build_snippet(snippet_source, query)
+
+        results.append(
+            DocumentSearchResultResponse(
+                document_id=document.id,
+                project_id=document.project_id,
+                original_filename=document.original_filename,
+                parse_status=document.parse_status,
+                matched_field=matched_field,
+                match_count=total_count,
+                snippet=snippet,
+            )
+        )
+
+    results.sort(key=lambda item: (-item.match_count, item.document_id))
+    return results[:limit]

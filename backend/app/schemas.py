@@ -33,3 +33,13 @@ class DocumentResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class DocumentSearchResultResponse(BaseModel):
+    document_id: int
+    project_id: int
+    original_filename: str
+    parse_status: str
+    matched_field: str
+    match_count: int
+    snippet: str
