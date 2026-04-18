@@ -169,3 +169,33 @@ class Agent4LeedScoringResponse(BaseModel):
     reviewed_document_count: int
     parsed_document_count: int
     findings: list[LeedScoringFindingResponse]
+
+
+class CostImpactFindingResponse(BaseModel):
+    cost_item_id: str
+    cost_item_name: str
+    status: str
+    cost_impact_level: str
+    estimated_cost_min_pct: float
+    estimated_cost_max_pct: float
+    progress_percent: int
+    evidence_count: int
+    searched_keywords: list[str]
+    summary: str
+    assumptions: list[str]
+    cost_drivers: list[str]
+    evidences: list[ReviewEvidenceItemResponse]
+    corrective_actions: list[CorrectiveActionResponse]
+
+
+class Agent5CostImpactResponse(BaseModel):
+    project_id: int
+    project_name: str
+    overall_status: str
+    estimated_total_min_pct: float
+    estimated_total_max_pct: float
+    overall_progress_percent: int
+    method_note: str
+    reviewed_document_count: int
+    parsed_document_count: int
+    findings: list[CostImpactFindingResponse]

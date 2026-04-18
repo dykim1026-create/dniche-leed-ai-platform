@@ -154,6 +154,36 @@ type Agent4LeedScoring = {
   findings: LeedScoringFinding[];
 };
 
+type CostImpactFinding = {
+  cost_item_id: string;
+  cost_item_name: string;
+  status: string;
+  cost_impact_level: string;
+  estimated_cost_min_pct: number;
+  estimated_cost_max_pct: number;
+  progress_percent: number;
+  evidence_count: number;
+  searched_keywords: string[];
+  summary: string;
+  assumptions: string[];
+  cost_drivers: string[];
+  evidences: ReviewEvidenceItem[];
+  corrective_actions: CorrectiveAction[];
+};
+
+type Agent5CostImpact = {
+  project_id: number;
+  project_name: string;
+  overall_status: string;
+  estimated_total_min_pct: number;
+  estimated_total_max_pct: number;
+  overall_progress_percent: number;
+  method_note: string;
+  reviewed_document_count: number;
+  parsed_document_count: number;
+  findings: CostImpactFinding[];
+};
+
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8001";
 
@@ -186,7 +216,15 @@ function ProgressBar({ value }: { value: number }) {
 }
 
 function getStatusBadgeStyle(status: string): React.CSSProperties {
-  if (["evidence_found", "good_initial_coverage", "ready", "ready_for_simulation", "ready_for_carbon_assessment", "good_documentation_readiness"].includes(status)) {
+  if ([
+    "evidence_found",
+    "good_initial_coverage",
+    "ready",
+    "ready_for_simulation",
+    "ready_for_carbon_assessment",
+    "good_documentation_readiness",
+    "good_cost_visibility"
+  ].includes(status)) {
     return {
       display: "inline-block",
       padding: "4px 10px",
@@ -198,7 +236,14 @@ function getStatusBadgeStyle(status: string): React.CSSProperties {
     };
   }
 
-  if (["limited_evidence", "partial_coverage", "partial", "partial_readiness", "partial_documentation_readiness"].includes(status)) {
+  if ([
+    "limited_evidence",
+    "partial_coverage",
+    "partial",
+    "partial_readiness",
+    "partial_documentation_readiness",
+    "partial_cost_visibility"
+  ].includes(status)) {
     return {
       display: "inline-block",
       padding: "4px 10px",
@@ -210,7 +255,15 @@ function getStatusBadgeStyle(status: string): React.CSSProperties {
     };
   }
 
-  if (["no_evidence", "insufficient_evidence", "insufficient_documents", "missing", "not_ready", "insufficient_documentation"].includes(status)) {
+  if ([
+    "no_evidence",
+    "insufficient_evidence",
+    "insufficient_documents",
+    "missing",
+    "not_ready",
+    "insufficient_documentation",
+    "low_cost_visibility"
+  ].includes(status)) {
     return {
       display: "inline-block",
       padding: "4px 10px",
@@ -281,6 +334,40 @@ function getPriorityBadgeStyle(priority: string): React.CSSProperties {
   };
 }
 
+function getCostLevelBadgeStyle(level: string): React.CSSProperties {
+  if (level === "high") {
+    return {
+      display: "inline-block",
+      padding: "4px 10px",
+      borderRadius: 999,
+      background: "#fdecec",
+      border: "1px solid #ef9a9a",
+      color: "#a12626",
+      fontWeight: 600
+    };
+  }
+  if (level === "medium") {
+    return {
+      display: "inline-block",
+      padding: "4px 10px",
+      borderRadius: 999,
+      background: "#fff7e6",
+      border: "1px solid #f0c36d",
+      color: "#8a5a00",
+      fontWeight: 600
+    };
+  }
+  return {
+    display: "inline-block",
+    padding: "4px 10px",
+    borderRadius: 999,
+    background: "#e8f7ee",
+    border: "1px solid #96d5ab",
+    color: "#1f6b3a",
+    fontWeight: 600
+  };
+}
+
 export default function HomePage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
@@ -293,6 +380,7 @@ export default function HomePage() {
   const [agent2Review, setAgent2Review] = useState<Agent2EnergyReview | null>(null);
   const [agent3Review, setAgent3Review] = useState<Agent3CarbonReview | null>(null);
   const [agent4Review, setAgent4Review] = useState<Agent4LeedScoring | null>(null);
+  const [agent5Review, setAgent5Review] = useState<Agent5CostImpact | null>(null);
   const [loading, setLoading] = useState(true);
   const [submittingProject, setSubmittingProject] = useState(false);
   const [submittingDocument, setSubmittingDocument] = useState(false);
@@ -301,6 +389,7 @@ export default function HomePage() {
   const [runningAgent2, setRunningAgent2] = useState(false);
   const [runningAgent3, setRunningAgent3] = useState(false);
   const [runningAgent4, setRunningAgent4] = useState(false);
+  const [runningAgent5, setRunningAgent5] = useState(false);
   const [topicStatusFilter, setTopicStatusFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [error, setError] = useState("");
@@ -308,9 +397,7 @@ export default function HomePage() {
 
   async function loadProjects() {
     const res = await fetch(`${API_BASE_URL}/projects`);
-    if (!res.ok) {
-      throw new Error("Failed to load projects");
-    }
+    if (!res.ok) throw new Error("Failed to load projects");
     const data = await res.json();
     setProjects(data);
 
@@ -321,9 +408,7 @@ export default function HomePage() {
 
   async function loadHealth() {
     const res = await fetch(`${API_BASE_URL}/health`);
-    if (!res.ok) {
-      throw new Error("Failed to load health status");
-    }
+    if (!res.ok) throw new Error("Failed to load health status");
     const data = await res.json();
     setHealth(data);
   }
@@ -333,11 +418,8 @@ export default function HomePage() {
       setDocuments([]);
       return;
     }
-
     const res = await fetch(`${API_BASE_URL}/projects/${projectId}/documents`);
-    if (!res.ok) {
-      throw new Error("Failed to load documents");
-    }
+    if (!res.ok) throw new Error("Failed to load documents");
     const data = await res.json();
     setDocuments(data);
   }
@@ -347,13 +429,9 @@ export default function HomePage() {
       setAgent1Review(null);
       return;
     }
-
     const res = await fetch(`${API_BASE_URL}/projects/${projectId}/agent1/review`);
-    if (!res.ok) {
-      throw new Error("Failed to load Agent 1 review");
-    }
-    const data = await res.json();
-    setAgent1Review(data);
+    if (!res.ok) throw new Error("Failed to load Agent 1 review");
+    setAgent1Review(await res.json());
   }
 
   async function loadAgent2Review(projectId: string) {
@@ -361,13 +439,9 @@ export default function HomePage() {
       setAgent2Review(null);
       return;
     }
-
     const res = await fetch(`${API_BASE_URL}/projects/${projectId}/agent2/energy-review`);
-    if (!res.ok) {
-      throw new Error("Failed to load Agent 2 review");
-    }
-    const data = await res.json();
-    setAgent2Review(data);
+    if (!res.ok) throw new Error("Failed to load Agent 2 review");
+    setAgent2Review(await res.json());
   }
 
   async function loadAgent3Review(projectId: string) {
@@ -375,13 +449,9 @@ export default function HomePage() {
       setAgent3Review(null);
       return;
     }
-
     const res = await fetch(`${API_BASE_URL}/projects/${projectId}/agent3/carbon-review`);
-    if (!res.ok) {
-      throw new Error("Failed to load Agent 3 review");
-    }
-    const data = await res.json();
-    setAgent3Review(data);
+    if (!res.ok) throw new Error("Failed to load Agent 3 review");
+    setAgent3Review(await res.json());
   }
 
   async function loadAgent4Review(projectId: string) {
@@ -389,13 +459,19 @@ export default function HomePage() {
       setAgent4Review(null);
       return;
     }
-
     const res = await fetch(`${API_BASE_URL}/projects/${projectId}/agent4/leed-scoring`);
-    if (!res.ok) {
-      throw new Error("Failed to load Agent 4 review");
+    if (!res.ok) throw new Error("Failed to load Agent 4 review");
+    setAgent4Review(await res.json());
+  }
+
+  async function loadAgent5Review(projectId: string) {
+    if (!projectId) {
+      setAgent5Review(null);
+      return;
     }
-    const data = await res.json();
-    setAgent4Review(data);
+    const res = await fetch(`${API_BASE_URL}/projects/${projectId}/agent5/cost-impact`);
+    if (!res.ok) throw new Error("Failed to load Agent 5 review");
+    setAgent5Review(await res.json());
   }
 
   useEffect(() => {
@@ -411,42 +487,35 @@ export default function HomePage() {
         setLoading(false);
       }
     }
-
     initialize();
   }, []);
 
   useEffect(() => {
     if (selectedProjectId) {
-      loadDocuments(selectedProjectId).catch((err) => {
-        setError("Failed to load documents.");
-        console.error(err);
-      });
+      loadDocuments(selectedProjectId).catch(console.error);
       loadAgent1Review(selectedProjectId).catch(console.error);
       loadAgent2Review(selectedProjectId).catch(console.error);
       loadAgent3Review(selectedProjectId).catch(console.error);
       loadAgent4Review(selectedProjectId).catch(console.error);
+      loadAgent5Review(selectedProjectId).catch(console.error);
     } else {
       setDocuments([]);
       setAgent1Review(null);
       setAgent2Review(null);
       setAgent3Review(null);
       setAgent4Review(null);
+      setAgent5Review(null);
     }
   }, [selectedProjectId]);
 
   const filteredFindings = useMemo(() => {
     if (!agent1Review) return [];
-
     return agent1Review.findings.filter((finding) => {
       const statusMatch =
         topicStatusFilter === "all" || finding.status === topicStatusFilter;
-
       const priorityMatch =
         priorityFilter === "all" ||
-        finding.corrective_actions.some(
-          (action) => action.priority === priorityFilter
-        );
-
+        finding.corrective_actions.some((action) => action.priority === priorityFilter);
       return statusMatch && priorityMatch;
     });
   }, [agent1Review, topicStatusFilter, priorityFilter]);
@@ -465,21 +534,16 @@ export default function HomePage() {
 
       const res = await fetch(`${API_BASE_URL}/projects`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: name.trim(),
           description: description.trim() || null
         })
       });
 
-      if (!res.ok) {
-        throw new Error("Failed to create project");
-      }
+      if (!res.ok) throw new Error("Failed to create project");
 
       const newProject = await res.json();
-
       setName("");
       setDescription("");
       await loadProjects();
@@ -512,23 +576,16 @@ export default function HomePage() {
       const formData = new FormData();
       formData.append("file", selectedFile);
 
-      const res = await fetch(
-        `${API_BASE_URL}/projects/${selectedProjectId}/documents`,
-        {
-          method: "POST",
-          body: formData
-        }
-      );
+      const res = await fetch(`${API_BASE_URL}/projects/${selectedProjectId}/documents`, {
+        method: "POST",
+        body: formData
+      });
 
-      if (!res.ok) {
-        throw new Error("Failed to upload document");
-      }
+      if (!res.ok) throw new Error("Failed to upload document");
 
       setSelectedFile(null);
       const fileInput = document.getElementById("documentFile") as HTMLInputElement | null;
-      if (fileInput) {
-        fileInput.value = "";
-      }
+      if (fileInput) fileInput.value = "";
 
       setUploadMessage("Document uploaded successfully.");
       await loadDocuments(selectedProjectId);
@@ -536,6 +593,7 @@ export default function HomePage() {
       await loadAgent2Review(selectedProjectId);
       await loadAgent3Review(selectedProjectId);
       await loadAgent4Review(selectedProjectId);
+      await loadAgent5Review(selectedProjectId);
     } catch (err) {
       setUploadMessage("Failed to upload document.");
       console.error(err);
@@ -553,9 +611,7 @@ export default function HomePage() {
         method: "POST"
       });
 
-      if (!res.ok) {
-        throw new Error("Failed to parse document");
-      }
+      if (!res.ok) throw new Error("Failed to parse document");
 
       if (selectedProjectId) {
         await loadDocuments(selectedProjectId);
@@ -563,6 +619,7 @@ export default function HomePage() {
         await loadAgent2Review(selectedProjectId);
         await loadAgent3Review(selectedProjectId);
         await loadAgent4Review(selectedProjectId);
+        await loadAgent5Review(selectedProjectId);
       }
     } catch (err) {
       setUploadMessage("Failed to parse document.");
@@ -573,83 +630,58 @@ export default function HomePage() {
   }
 
   async function handleRunAgent1() {
-    if (!selectedProjectId) {
-      setUploadMessage("Please select a project first.");
-      return;
-    }
-
+    if (!selectedProjectId) return;
     try {
       setRunningAgent1(true);
       await loadAgent1Review(selectedProjectId);
-    } catch (err) {
-      setUploadMessage("Failed to run Agent 1 review.");
-      console.error(err);
     } finally {
       setRunningAgent1(false);
     }
   }
 
   async function handleRunAgent2() {
-    if (!selectedProjectId) {
-      setUploadMessage("Please select a project first.");
-      return;
-    }
-
+    if (!selectedProjectId) return;
     try {
       setRunningAgent2(true);
       await loadAgent2Review(selectedProjectId);
-    } catch (err) {
-      setUploadMessage("Failed to run Agent 2 review.");
-      console.error(err);
     } finally {
       setRunningAgent2(false);
     }
   }
 
   async function handleRunAgent3() {
-    if (!selectedProjectId) {
-      setUploadMessage("Please select a project first.");
-      return;
-    }
-
+    if (!selectedProjectId) return;
     try {
       setRunningAgent3(true);
       await loadAgent3Review(selectedProjectId);
-    } catch (err) {
-      setUploadMessage("Failed to run Agent 3 review.");
-      console.error(err);
     } finally {
       setRunningAgent3(false);
     }
   }
 
   async function handleRunAgent4() {
-    if (!selectedProjectId) {
-      setUploadMessage("Please select a project first.");
-      return;
-    }
-
+    if (!selectedProjectId) return;
     try {
       setRunningAgent4(true);
       await loadAgent4Review(selectedProjectId);
-    } catch (err) {
-      setUploadMessage("Failed to run Agent 4 review.");
-      console.error(err);
     } finally {
       setRunningAgent4(false);
     }
   }
 
-  function handleExportCsv() {
-    if (!selectedProjectId) {
-      setUploadMessage("Please select a project first.");
-      return;
+  async function handleRunAgent5() {
+    if (!selectedProjectId) return;
+    try {
+      setRunningAgent5(true);
+      await loadAgent5Review(selectedProjectId);
+    } finally {
+      setRunningAgent5(false);
     }
+  }
 
-    window.open(
-      `${API_BASE_URL}/projects/${selectedProjectId}/agent1/export.csv`,
-      "_blank"
-    );
+  function handleExportCsv() {
+    if (!selectedProjectId) return;
+    window.open(`${API_BASE_URL}/projects/${selectedProjectId}/agent1/export.csv`, "_blank");
   }
 
   return (
@@ -903,12 +935,7 @@ export default function HomePage() {
             {runningAgent2 ? "Refreshing..." : "Run Agent 2 Review"}
           </button>
         </div>
-
-        {!selectedProjectId ? (
-          <p style={{ marginTop: 16 }}>Select a project first.</p>
-        ) : !agent2Review ? (
-          <p style={{ marginTop: 16 }}>No energy review data yet.</p>
-        ) : (
+        {agent2Review && (
           <div style={{ marginTop: 16 }}>
             <p>Project: <strong>{agent2Review.project_name}</strong></p>
             <p>Overall status: <span style={getStatusBadgeStyle(agent2Review.overall_status)}>{agent2Review.overall_status}</span></p>
@@ -932,12 +959,7 @@ export default function HomePage() {
             {runningAgent3 ? "Refreshing..." : "Run Agent 3 Review"}
           </button>
         </div>
-
-        {!selectedProjectId ? (
-          <p style={{ marginTop: 16 }}>Select a project first.</p>
-        ) : !agent3Review ? (
-          <p style={{ marginTop: 16 }}>No carbon review data yet.</p>
-        ) : (
+        {agent3Review && (
           <div style={{ marginTop: 16 }}>
             <p>Project: <strong>{agent3Review.project_name}</strong></p>
             <p>Overall status: <span style={getStatusBadgeStyle(agent3Review.overall_status)}>{agent3Review.overall_status}</span></p>
@@ -961,12 +983,7 @@ export default function HomePage() {
             {runningAgent4 ? "Refreshing..." : "Run Agent 4 Review"}
           </button>
         </div>
-
-        {!selectedProjectId ? (
-          <p style={{ marginTop: 16 }}>Select a project first.</p>
-        ) : !agent4Review ? (
-          <p style={{ marginTop: 16 }}>No LEED scoring data yet.</p>
-        ) : (
+        {agent4Review && (
           <div style={{ marginTop: 16 }}>
             <p>Project: <strong>{agent4Review.project_name}</strong></p>
             <p>Overall status: <span style={getStatusBadgeStyle(agent4Review.overall_status)}>{agent4Review.overall_status}</span></p>
@@ -974,48 +991,78 @@ export default function HomePage() {
             <div style={{ marginBottom: 12 }}>
               <ProgressBar value={agent4Review.overall_progress_percent} />
             </div>
-            <p>Overall progress: <strong>{agent4Review.overall_progress_percent}%</strong></p>
             <p>Estimated certification band: <strong>{agent4Review.estimated_certification_band}</strong></p>
-            <p>Target certification: <strong>{agent4Review.target_certification}</strong></p>
-            <p>{agent4Review.method_note}</p>
+          </div>
+        )}
+      </div>
+
+      <div style={{ padding: 16, border: "1px solid #ddd", borderRadius: 8, marginBottom: 24 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <h2 style={{ marginTop: 0, marginBottom: 0 }}>Agent 5 Cost Impact</h2>
+          <button
+            type="button"
+            onClick={handleRunAgent5}
+            disabled={!selectedProjectId || runningAgent5}
+            style={{ padding: "8px 12px", borderRadius: 6, border: "1px solid #222", background: "#fff", cursor: "pointer" }}
+          >
+            {runningAgent5 ? "Refreshing..." : "Run Agent 5 Review"}
+          </button>
+        </div>
+
+        {!selectedProjectId ? (
+          <p style={{ marginTop: 16 }}>Select a project first.</p>
+        ) : !agent5Review ? (
+          <p style={{ marginTop: 16 }}>No cost impact data yet.</p>
+        ) : (
+          <div style={{ marginTop: 16 }}>
+            <p>Project: <strong>{agent5Review.project_name}</strong></p>
+            <p>Overall status: <span style={getStatusBadgeStyle(agent5Review.overall_status)}>{agent5Review.overall_status}</span></p>
+            <p>
+              Estimated total premium range: <strong>{agent5Review.estimated_total_min_pct}% - {agent5Review.estimated_total_max_pct}%</strong>
+            </p>
+            <div style={{ marginBottom: 12 }}>
+              <ProgressBar value={agent5Review.overall_progress_percent} />
+            </div>
+            <p>Overall progress: <strong>{agent5Review.overall_progress_percent}%</strong></p>
+            <p>{agent5Review.method_note}</p>
 
             <div style={{ display: "grid", gap: 16, marginTop: 16 }}>
-              {agent4Review.findings.map((finding) => (
-                <div key={finding.category_id} style={{ border: "1px solid #ddd", borderRadius: 8, padding: 16 }}>
+              {agent5Review.findings.map((finding) => (
+                <div key={finding.cost_item_id} style={{ border: "1px solid #ddd", borderRadius: 8, padding: 16 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                    <h3 style={{ marginTop: 0, marginBottom: 0 }}>{finding.category_name}</h3>
-                    <span style={getStatusBadgeStyle(finding.status)}>{finding.status}</span>
+                    <h3 style={{ marginTop: 0, marginBottom: 0 }}>{finding.cost_item_name}</h3>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <span style={getStatusBadgeStyle(finding.status)}>{finding.status}</span>
+                      <span style={getCostLevelBadgeStyle(finding.cost_impact_level)}>{finding.cost_impact_level}</span>
+                    </div>
                   </div>
 
-                  <p style={{ marginTop: 12 }}>{finding.review_note}</p>
-                  <p>Estimated points: <strong>{finding.estimated_points} / {finding.max_points}</strong></p>
+                  <p style={{ marginTop: 12 }}>{finding.summary}</p>
+                  <p>
+                    Estimated premium range: <strong>{finding.estimated_cost_min_pct}% - {finding.estimated_cost_max_pct}%</strong>
+                  </p>
                   <div style={{ marginBottom: 12 }}>
                     <ProgressBar value={finding.progress_percent} />
                   </div>
-                  <p>Progress: <strong>{finding.progress_percent}%</strong></p>
                   <p>Evidence count: <strong>{finding.evidence_count}</strong></p>
                   <p>Searched keywords: {finding.searched_keywords.join(", ")}</p>
 
                   <div style={{ marginTop: 12 }}>
-                    <strong>Required Documents</strong>
+                    <strong>Assumptions</strong>
                     <ul style={{ marginTop: 8 }}>
-                      {finding.required_documents.map((doc, index) => (
-                        <li key={`${finding.category_id}-req-${index}`}>{doc}</li>
+                      {finding.assumptions.map((item, index) => (
+                        <li key={`${finding.cost_item_id}-assumption-${index}`}>{item}</li>
                       ))}
                     </ul>
                   </div>
 
                   <div style={{ marginTop: 12 }}>
-                    <strong>Missing Documents</strong>
-                    {finding.missing_documents.length === 0 ? (
-                      <p>No major missing documents identified for starter review.</p>
-                    ) : (
-                      <ul style={{ marginTop: 8 }}>
-                        {finding.missing_documents.map((doc, index) => (
-                          <li key={`${finding.category_id}-miss-${index}`}>{doc}</li>
-                        ))}
-                      </ul>
-                    )}
+                    <strong>Cost Drivers</strong>
+                    <ul style={{ marginTop: 8 }}>
+                      {finding.cost_drivers.map((item, index) => (
+                        <li key={`${finding.cost_item_id}-driver-${index}`}>{item}</li>
+                      ))}
+                    </ul>
                   </div>
 
                   <div style={{ marginTop: 12 }}>
@@ -1031,7 +1078,7 @@ export default function HomePage() {
                       </thead>
                       <tbody>
                         {finding.corrective_actions.map((action, index) => (
-                          <tr key={`${finding.category_id}-action-${index}`}>
+                          <tr key={`${finding.cost_item_id}-action-${index}`}>
                             <td style={{ padding: "10px 0", verticalAlign: "top" }}>{action.discipline}</td>
                             <td style={{ padding: "10px 0", verticalAlign: "top" }}>
                               <span style={getPriorityBadgeStyle(action.priority)}>{action.priority}</span>
@@ -1051,7 +1098,7 @@ export default function HomePage() {
                     ) : (
                       <ul style={{ marginTop: 8 }}>
                         {finding.evidences.map((evidence, index) => (
-                          <li key={`${finding.category_id}-${index}`} style={{ marginBottom: 10 }}>
+                          <li key={`${finding.cost_item_id}-${index}`} style={{ marginBottom: 10 }}>
                             <div>
                               <strong>{evidence.original_filename}</strong> — keyword: <strong>{evidence.keyword}</strong>
                             </div>

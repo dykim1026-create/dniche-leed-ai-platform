@@ -31,6 +31,8 @@ from app.schemas import (
     Agent3CarbonReviewResponse,
     LeedScoringFindingResponse,
     Agent4LeedScoringResponse,
+    CostImpactFindingResponse,
+    Agent5CostImpactResponse,
 )
 
 app = FastAPI(title="Dniche LEED AI Backend")
@@ -698,6 +700,216 @@ LEED_ACTION_LIBRARY = {
             "discipline": "Project Management",
             "action": "Confirm whether any regional priority or pilot paths should be targeted.",
             "reason": "Targeted strategy is needed before documentation can be assembled.",
+        },
+    ],
+}
+
+COST_IMPACT_ITEMS = [
+    {
+        "cost_item_id": "energy_modeling_and_commissioning",
+        "cost_item_name": "Energy Modeling & Commissioning",
+        "keywords": ["energy model", "commissioning", "cx", "commissioning authority", "ashrae", "baseline"],
+        "summary": "Cost exposure related to energy modeling, commissioning scope, and related design coordination.",
+        "base_min_pct": 0.3,
+        "base_max_pct": 1.2,
+        "assumptions": [
+            "Applies to projects targeting meaningful EA documentation",
+            "Assumes design-stage coordination and consultant effort increase",
+            "Does not include major plant replacement scope",
+        ],
+        "cost_drivers": [
+            "Modeling consultant effort",
+            "Commissioning scope",
+            "Coordination across MEP and sustainability teams",
+        ],
+    },
+    {
+        "cost_item_id": "water_efficiency_measures",
+        "cost_item_name": "Water Efficiency Measures",
+        "keywords": ["water", "fixture", "irrigation", "flow rate", "gpm", "gpf"],
+        "summary": "Potential premium from efficient fixtures, irrigation controls, and water calculation support.",
+        "base_min_pct": 0.2,
+        "base_max_pct": 0.9,
+        "assumptions": [
+            "Assumes typical multifamily/commercial plumbing improvements",
+            "Assumes no extraordinary site water infrastructure change",
+        ],
+        "cost_drivers": [
+            "Fixture specification upgrades",
+            "Irrigation control strategy",
+            "Water calculation and coordination effort",
+        ],
+    },
+    {
+        "cost_item_id": "low_carbon_materials",
+        "cost_item_name": "Low-Carbon / Transparent Materials",
+        "keywords": ["epd", "concrete", "steel", "recycled", "material", "carbon"],
+        "summary": "Potential premium from low-carbon material selection and supplier documentation.",
+        "base_min_pct": 0.8,
+        "base_max_pct": 4.0,
+        "assumptions": [
+            "Range depends strongly on local product availability",
+            "High-volume structure and façade packages drive most cost impact",
+        ],
+        "cost_drivers": [
+            "Low-carbon concrete or steel options",
+            "Supplier documentation availability",
+            "Product substitution constraints",
+        ],
+    },
+    {
+        "cost_item_id": "ieq_and_low_emitting_materials",
+        "cost_item_name": "IEQ / Low-Emitting Materials",
+        "keywords": ["voc", "iaq", "ventilation", "daylight", "thermal comfort", "low emitting"],
+        "summary": "Potential premium from IEQ-related specifications, ventilation, and interior product selections.",
+        "base_min_pct": 0.3,
+        "base_max_pct": 1.5,
+        "assumptions": [
+            "Assumes moderate IEQ upgrade path rather than major redesign",
+            "Assumes finish specification control is still possible",
+        ],
+        "cost_drivers": [
+            "Low-emitting product selection",
+            "Ventilation enhancement",
+            "Daylight / comfort coordination effort",
+        ],
+    },
+    {
+        "cost_item_id": "renewables_and_advanced_systems",
+        "cost_item_name": "Renewables / Advanced Systems",
+        "keywords": ["solar", "pv", "battery", "renewable", "high efficiency", "advanced controls"],
+        "summary": "Potential premium from on-site renewables and advanced energy systems.",
+        "base_min_pct": 1.0,
+        "base_max_pct": 8.0,
+        "assumptions": [
+            "Highly dependent on whether renewables are in base scope",
+            "This item is often scenario-dependent, not always mandatory",
+        ],
+        "cost_drivers": [
+            "PV system size",
+            "Battery/storage or advanced controls",
+            "Electrical integration scope",
+        ],
+    },
+    {
+        "cost_item_id": "waste_and_material_tracking",
+        "cost_item_name": "Waste Management / Material Tracking",
+        "keywords": ["waste", "diversion", "tracker", "material tracker", "documentation", "recycling"],
+        "summary": "Soft-cost and process-cost exposure from tracking, reporting, and contractor waste measures.",
+        "base_min_pct": 0.1,
+        "base_max_pct": 0.6,
+        "assumptions": [
+            "Mostly documentation/process related unless site constraints are unusual",
+            "Contractor procedures can influence actual premium",
+        ],
+        "cost_drivers": [
+            "Tracking and admin effort",
+            "Contractor waste separation procedures",
+            "Reporting and documentation management",
+        ],
+    },
+    {
+        "cost_item_id": "leed_admin_and_submission",
+        "cost_item_name": "LEED Admin / Submission Management",
+        "keywords": ["leed", "submission", "documentation", "narrative", "tracker", "review"],
+        "summary": "Soft-cost premium from LEED management, consultant coordination, and submission preparation.",
+        "base_min_pct": 0.2,
+        "base_max_pct": 1.0,
+        "assumptions": [
+            "Assumes consultant-led certification management",
+            "Excludes registration and review fees as exact third-party cost line items",
+        ],
+        "cost_drivers": [
+            "Documentation management effort",
+            "Narrative and tracker preparation",
+            "Interdisciplinary coordination meetings",
+        ],
+    },
+]
+
+COST_ACTION_LIBRARY = {
+    "energy_modeling_and_commissioning": [
+        {
+            "discipline": "Sustainability",
+            "action": "Define energy modeling and commissioning scope early with a clear consultant responsibility matrix.",
+            "reason": "Unclear scope causes avoidable soft-cost growth and coordination inefficiency.",
+        },
+        {
+            "discipline": "Mechanical",
+            "action": "Freeze major HVAC assumptions early to reduce repeated model revisions.",
+            "reason": "Late HVAC changes often increase both consultant and design revision costs.",
+        },
+    ],
+    "water_efficiency_measures": [
+        {
+            "discipline": "Plumbing",
+            "action": "Standardize efficient fixture selections early and confirm compliant alternatives.",
+            "reason": "Late plumbing substitutions can increase procurement and redesign effort.",
+        },
+        {
+            "discipline": "Landscape",
+            "action": "Confirm irrigation scope and reduced-water landscape strategy early.",
+            "reason": "Early alignment reduces late-stage site redesign costs.",
+        },
+    ],
+    "low_carbon_materials": [
+        {
+            "discipline": "Structure",
+            "action": "Prioritize structural hotspots and test low-carbon concrete/steel options early.",
+            "reason": "Structure usually drives the largest embodied carbon-related premium exposure.",
+        },
+        {
+            "discipline": "Procurement / Cost",
+            "action": "Obtain supplier options and indicative price deltas for major low-carbon materials.",
+            "reason": "Market pricing uncertainty is a major cost-risk driver.",
+        },
+    ],
+    "ieq_and_low_emitting_materials": [
+        {
+            "discipline": "Interior Design",
+            "action": "Lock finish performance criteria early for low-emitting materials.",
+            "reason": "Late finish changes can trigger premium product substitutions.",
+        },
+        {
+            "discipline": "Mechanical",
+            "action": "Clarify ventilation enhancement scope and whether it affects equipment sizing.",
+            "reason": "IEQ-related ventilation changes can affect both capital and operating design choices.",
+        },
+    ],
+    "renewables_and_advanced_systems": [
+        {
+            "discipline": "Electrical",
+            "action": "Treat PV and advanced controls as a separate scenario with clear base-scope boundaries.",
+            "reason": "This avoids overstating cost impact when renewables are optional or phased.",
+        },
+        {
+            "discipline": "Sustainability",
+            "action": "Prepare a base case versus improvement case comparison.",
+            "reason": "Scenario-based comparison makes cost-benefit review more credible.",
+        },
+    ],
+    "waste_and_material_tracking": [
+        {
+            "discipline": "Contractor / Construction",
+            "action": "Define waste diversion procedures and reporting responsibilities before tender or early construction.",
+            "reason": "Process clarity reduces hidden admin and site management cost growth.",
+        },
+        {
+            "discipline": "Sustainability",
+            "action": "Use a simple tracker template for material and waste evidence.",
+            "reason": "Structured tracking reduces rework and documentation inefficiency.",
+        },
+    ],
+    "leed_admin_and_submission": [
+        {
+            "discipline": "Project Management",
+            "action": "Set a formal LEED deliverables calendar by package and discipline.",
+            "reason": "Planning reduces coordination inefficiency and repeated submission work.",
+        },
+        {
+            "discipline": "Sustainability",
+            "action": "Centralize templates, narratives, and trackers into one submission workflow.",
+            "reason": "Submission management cost is mainly driven by fragmented documentation.",
         },
     ],
 }
@@ -1383,6 +1595,139 @@ def build_agent4_leed_scoring(project_id: int, db: Session) -> Agent4LeedScoring
     )
 
 
+def determine_cost_status(total_count: int) -> str:
+    if total_count >= 3:
+        return "ready"
+    if total_count >= 1:
+        return "partial"
+    return "missing"
+
+
+def get_cost_factor(status: str) -> float:
+    if status == "ready":
+        return 1.0
+    if status == "partial":
+        return 0.6
+    return 0.3
+
+
+def get_cost_impact_level(max_pct: float) -> str:
+    if max_pct >= 3.0:
+        return "high"
+    if max_pct >= 1.0:
+        return "medium"
+    return "low"
+
+
+def build_cost_corrective_actions(cost_item_id: str, status: str):
+    base_actions = COST_ACTION_LIBRARY.get(cost_item_id, [])
+    priority = get_priority_for_status(status)
+    actions = []
+
+    for item in base_actions:
+        if status == "missing":
+            action_text = f"Define cost scope: {item['action']}"
+            reason_text = f"{item['reason']} Current cost review has very limited scope visibility."
+        elif status == "partial":
+            action_text = f"Refine cost assumptions: {item['action']}"
+            reason_text = f"{item['reason']} Current cost review has partial evidence only."
+        else:
+            action_text = f"Validate pricing exposure: {item['action']}"
+            reason_text = f"{item['reason']} Evidence exists, so pricing assumptions should now be checked."
+        actions.append(
+            CorrectiveActionResponse(
+                discipline=item["discipline"],
+                priority=priority,
+                action=action_text,
+                reason=reason_text,
+            )
+        )
+
+    return actions
+
+
+def determine_cost_overall_status(findings: list[CostImpactFindingResponse], parsed_document_count: int) -> str:
+    if parsed_document_count == 0:
+        return "insufficient_documents"
+
+    ready_count = sum(1 for finding in findings if finding.status == "ready")
+    partial_count = sum(1 for finding in findings if finding.status == "partial")
+
+    if ready_count >= 4:
+        return "good_cost_visibility"
+    if ready_count + partial_count >= 3:
+        return "partial_cost_visibility"
+    return "low_cost_visibility"
+
+
+def build_agent5_cost_impact(project_id: int, db: Session) -> Agent5CostImpactResponse:
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    documents = (
+        db.query(Document)
+        .filter(Document.project_id == project_id)
+        .order_by(Document.id.desc())
+        .all()
+    )
+
+    parsed_documents = [
+        document
+        for document in documents
+        if document.parse_status == "parsed" and (document.extracted_text or "").strip()
+    ]
+
+    findings = []
+
+    for item in COST_IMPACT_ITEMS:
+        evidences, total_count = collect_topic_evidence(parsed_documents, item["keywords"])
+        status = determine_cost_status(total_count)
+        factor = get_cost_factor(status)
+        est_min = round(item["base_min_pct"] * factor, 2)
+        est_max = round(item["base_max_pct"] * factor, 2)
+        progress_percent = get_topic_score(status)
+        cost_impact_level = get_cost_impact_level(est_max)
+        corrective_actions = build_cost_corrective_actions(item["cost_item_id"], status)
+
+        findings.append(
+            CostImpactFindingResponse(
+                cost_item_id=item["cost_item_id"],
+                cost_item_name=item["cost_item_name"],
+                status=status,
+                cost_impact_level=cost_impact_level,
+                estimated_cost_min_pct=est_min,
+                estimated_cost_max_pct=est_max,
+                progress_percent=progress_percent,
+                evidence_count=total_count,
+                searched_keywords=item["keywords"],
+                summary=item["summary"],
+                assumptions=item["assumptions"],
+                cost_drivers=item["cost_drivers"],
+                evidences=evidences,
+                corrective_actions=corrective_actions,
+            )
+        )
+
+    estimated_total_min_pct = round(sum(f.estimated_cost_min_pct for f in findings), 2)
+    estimated_total_max_pct = round(sum(f.estimated_cost_max_pct for f in findings), 2)
+    overall_progress_percent = int(sum(f.progress_percent for f in findings) / len(findings)) if findings else 0
+    overall_status = determine_cost_overall_status(findings, len(parsed_documents))
+
+    return Agent5CostImpactResponse(
+        project_id=project.id,
+        project_name=project.name,
+        overall_status=overall_status,
+        estimated_total_min_pct=estimated_total_min_pct,
+        estimated_total_max_pct=estimated_total_max_pct,
+        overall_progress_percent=overall_progress_percent,
+        method_note="This is a starter cost-impact estimate based on document coverage and typical LEED-related premium drivers. It is not a formal contractor or QS quotation.",
+        reviewed_document_count=len(documents),
+        parsed_document_count=len(parsed_documents),
+        findings=findings,
+    )
+
+
 @app.get("/")
 def read_root():
     return {"message": "Backend is running"}
@@ -1654,3 +1999,8 @@ def run_agent3_carbon_review(project_id: int, db: Session = Depends(get_db)):
 @app.get("/projects/{project_id}/agent4/leed-scoring", response_model=Agent4LeedScoringResponse)
 def run_agent4_leed_scoring(project_id: int, db: Session = Depends(get_db)):
     return build_agent4_leed_scoring(project_id, db)
+
+
+@app.get("/projects/{project_id}/agent5/cost-impact", response_model=Agent5CostImpactResponse)
+def run_agent5_cost_impact(project_id: int, db: Session = Depends(get_db)):
+    return build_agent5_cost_impact(project_id, db)
