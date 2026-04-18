@@ -20,6 +20,9 @@ from app.schemas import (
     ProjectResponse,
     DocumentResponse,
     DocumentSearchResultResponse,
+    ReviewEvidenceItemResponse,
+    ReviewFindingResponse,
+    Agent1ReviewResponse,
 )
 
 app = FastAPI(title="Dniche LEED AI Backend")
@@ -29,6 +32,33 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 TEXT_EXTENSIONS = {".txt", ".md", ".csv", ".json"}
 SUPPORTED_PARSE_EXTENSIONS = {".txt", ".md", ".csv", ".json", ".pdf", ".docx", ".xlsx"}
+
+REVIEW_TOPICS = [
+    {
+        "topic_id": "energy_performance",
+        "topic_name": "Energy Performance",
+        "keywords": ["energy", "eui", "hvac", "lighting", "envelope", "ashrae"],
+        "recommendation": "Add or improve energy model evidence, HVAC narrative, lighting power details, and envelope performance documentation.",
+    },
+    {
+        "topic_id": "water_efficiency",
+        "topic_name": "Water Efficiency",
+        "keywords": ["water", "fixture", "flow rate", "irrigation", "gpm", "gpf"],
+        "recommendation": "Add fixture schedules, water use calculations, irrigation strategy, and indoor/outdoor water reduction evidence.",
+    },
+    {
+        "topic_id": "materials",
+        "topic_name": "Materials and Embodied Carbon",
+        "keywords": ["material", "epd", "recycled", "concrete", "steel", "carbon"],
+        "recommendation": "Add material schedules, EPD references, recycled content information, and carbon-related documentation.",
+    },
+    {
+        "topic_id": "ieq",
+        "topic_name": "Indoor Environmental Quality",
+        "keywords": ["ventilation", "voc", "daylight", "co2", "thermal comfort", "iaq"],
+        "recommendation": "Add ventilation basis, IAQ strategy, VOC-related specifications, daylight evidence, and thermal comfort notes.",
+    },
+]
 
 
 app.add_middleware(
@@ -193,6 +223,56 @@ def build_snippet(source_text: str, query: str, radius: int = 120) -> str:
         snippet = snippet + "..."
 
     return snippet
+
+
+def collect_topic_evidence(documents: list[Document], keywords: list[str], max_items: int = 5):
+    evidences = []
+    total_count = 0
+
+    for document in documents:
+        extracted_text = document.extracted_text or ""
+        lower_text = extracted_text.lower()
+
+        for keyword in keywords:
+            keyword_lower = keyword.lower()
+            count = lower_text.count(keyword_lower)
+            if count > 0:
+                total_count += count
+                evidences.append(
+                    ReviewEvidenceItemResponse(
+                        document_id=document.id,
+                        original_filename=document.original_filename,
+                        keyword=keyword,
+                        snippet=build_snippet(extracted_text, keyword),
+                    )
+                )
+                break
+
+        if len(evidences) >= max_items:
+            break
+
+    return evidences, total_count
+
+
+def determine_finding_status(total_count: int) -> str:
+    if total_count >= 3:
+        return "evidence_found"
+    if total_count >= 1:
+        return "limited_evidence"
+    return "no_evidence"
+
+
+def determine_overall_status(findings: list[ReviewFindingResponse], parsed_document_count: int) -> str:
+    if parsed_document_count == 0:
+        return "insufficient_documents"
+
+    statuses = [finding.status for finding in findings]
+
+    if all(status == "evidence_found" for status in statuses):
+        return "good_initial_coverage"
+    if any(status in {"evidence_found", "limited_evidence"} for status in statuses):
+        return "partial_coverage"
+    return "insufficient_evidence"
 
 
 @app.get("/")
@@ -375,3 +455,52 @@ def search_project_documents(
 
     results.sort(key=lambda item: (-item.match_count, item.document_id))
     return results[:limit]
+
+
+@app.get("/projects/{project_id}/agent1/review", response_model=Agent1ReviewResponse)
+def run_agent1_review(project_id: int, db: Session = Depends(get_db)):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    documents = (
+        db.query(Document)
+        .filter(Document.project_id == project_id)
+        .order_by(Document.id.desc())
+        .all()
+    )
+
+    parsed_documents = [
+        document
+        for document in documents
+        if document.parse_status == "parsed" and (document.extracted_text or "").strip()
+    ]
+
+    findings = []
+
+    for topic in REVIEW_TOPICS:
+        evidences, total_count = collect_topic_evidence(parsed_documents, topic["keywords"])
+        status = determine_finding_status(total_count)
+
+        findings.append(
+            ReviewFindingResponse(
+                topic_id=topic["topic_id"],
+                topic_name=topic["topic_name"],
+                status=status,
+                evidence_count=total_count,
+                searched_keywords=topic["keywords"],
+                recommendation=topic["recommendation"],
+                evidences=evidences,
+            )
+        )
+
+    overall_status = determine_overall_status(findings, len(parsed_documents))
+
+    return Agent1ReviewResponse(
+        project_id=project.id,
+        project_name=project.name,
+        overall_status=overall_status,
+        reviewed_document_count=len(documents),
+        parsed_document_count=len(parsed_documents),
+        findings=findings,
+    )

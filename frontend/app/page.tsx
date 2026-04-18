@@ -28,6 +28,32 @@ type HealthResponse = {
   db_status: string;
 };
 
+type ReviewEvidenceItem = {
+  document_id: number;
+  original_filename: string;
+  keyword: string;
+  snippet: string;
+};
+
+type ReviewFinding = {
+  topic_id: string;
+  topic_name: string;
+  status: string;
+  evidence_count: number;
+  searched_keywords: string[];
+  recommendation: string;
+  evidences: ReviewEvidenceItem[];
+};
+
+type Agent1Review = {
+  project_id: number;
+  project_name: string;
+  overall_status: string;
+  reviewed_document_count: number;
+  parsed_document_count: number;
+  findings: ReviewFinding[];
+};
+
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8001";
 
@@ -44,10 +70,12 @@ export default function HomePage() {
   const [description, setDescription] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [health, setHealth] = useState<HealthResponse | null>(null);
+  const [agent1Review, setAgent1Review] = useState<Agent1Review | null>(null);
   const [loading, setLoading] = useState(true);
   const [submittingProject, setSubmittingProject] = useState(false);
   const [submittingDocument, setSubmittingDocument] = useState(false);
   const [parsingDocumentId, setParsingDocumentId] = useState<number | null>(null);
+  const [runningAgent1, setRunningAgent1] = useState(false);
   const [error, setError] = useState("");
   const [uploadMessage, setUploadMessage] = useState("");
 
@@ -87,6 +115,20 @@ export default function HomePage() {
     setDocuments(data);
   }
 
+  async function loadAgent1Review(projectId: string) {
+    if (!projectId) {
+      setAgent1Review(null);
+      return;
+    }
+
+    const res = await fetch(`${API_BASE_URL}/projects/${projectId}/agent1/review`);
+    if (!res.ok) {
+      throw new Error("Failed to load Agent 1 review");
+    }
+    const data = await res.json();
+    setAgent1Review(data);
+  }
+
   useEffect(() => {
     async function initialize() {
       try {
@@ -110,6 +152,12 @@ export default function HomePage() {
         setError("Failed to load documents.");
         console.error(err);
       });
+      loadAgent1Review(selectedProjectId).catch((err) => {
+        console.error(err);
+      });
+    } else {
+      setDocuments([]);
+      setAgent1Review(null);
     }
   }, [selectedProjectId]);
 
@@ -194,6 +242,7 @@ export default function HomePage() {
 
       setUploadMessage("Document uploaded successfully.");
       await loadDocuments(selectedProjectId);
+      await loadAgent1Review(selectedProjectId);
     } catch (err) {
       setUploadMessage("Failed to upload document.");
       console.error(err);
@@ -217,6 +266,7 @@ export default function HomePage() {
 
       if (selectedProjectId) {
         await loadDocuments(selectedProjectId);
+        await loadAgent1Review(selectedProjectId);
       }
     } catch (err) {
       setUploadMessage("Failed to parse document.");
@@ -226,10 +276,27 @@ export default function HomePage() {
     }
   }
 
+  async function handleRunAgent1() {
+    if (!selectedProjectId) {
+      setUploadMessage("Please select a project first.");
+      return;
+    }
+
+    try {
+      setRunningAgent1(true);
+      await loadAgent1Review(selectedProjectId);
+    } catch (err) {
+      setUploadMessage("Failed to run Agent 1 review.");
+      console.error(err);
+    } finally {
+      setRunningAgent1(false);
+    }
+  }
+
   return (
     <main style={{ maxWidth: 1200, margin: "0 auto" }}>
       <h1>Dniche LEED AI Platform</h1>
-      <p>Create projects, upload documents, and parse supported files.</p>
+      <p>Create projects, upload documents, parse files, and review Agent 1 findings.</p>
 
       <div style={{ padding: 16, border: "1px solid #ddd", borderRadius: 8, marginBottom: 24 }}>
         <h2 style={{ marginTop: 0 }}>System Status</h2>
@@ -369,6 +436,75 @@ export default function HomePage() {
               ))}
             </tbody>
           </table>
+        )}
+      </div>
+
+      <div style={{ padding: 16, border: "1px solid #ddd", borderRadius: 8, marginBottom: 24 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+          <h2 style={{ marginTop: 0, marginBottom: 0 }}>Agent 1 Review</h2>
+          <button
+            type="button"
+            onClick={handleRunAgent1}
+            disabled={!selectedProjectId || runningAgent1}
+            style={{ padding: "8px 12px", borderRadius: 6, border: "1px solid #222", background: "#fff", cursor: "pointer" }}
+          >
+            {runningAgent1 ? "Refreshing..." : "Run Agent 1 Review"}
+          </button>
+        </div>
+
+        {!selectedProjectId ? (
+          <p style={{ marginTop: 16 }}>Select a project first.</p>
+        ) : !agent1Review ? (
+          <p style={{ marginTop: 16 }}>No review data yet.</p>
+        ) : (
+          <div style={{ marginTop: 16 }}>
+            <p>
+              Project: <strong>{agent1Review.project_name}</strong>
+            </p>
+            <p>
+              Overall status: <strong>{agent1Review.overall_status}</strong>
+            </p>
+            <p>
+              Reviewed documents: <strong>{agent1Review.reviewed_document_count}</strong> / Parsed documents: <strong>{agent1Review.parsed_document_count}</strong>
+            </p>
+
+            <div style={{ display: "grid", gap: 16, marginTop: 16 }}>
+              {agent1Review.findings.map((finding) => (
+                <div
+                  key={finding.topic_id}
+                  style={{
+                    border: "1px solid #ddd",
+                    borderRadius: 8,
+                    padding: 16
+                  }}
+                >
+                  <h3 style={{ marginTop: 0 }}>{finding.topic_name}</h3>
+                  <p>Status: <strong>{finding.status}</strong></p>
+                  <p>Evidence count: <strong>{finding.evidence_count}</strong></p>
+                  <p>Searched keywords: {finding.searched_keywords.join(", ")}</p>
+                  <p>Recommendation: {finding.recommendation}</p>
+
+                  {finding.evidences.length === 0 ? (
+                    <p>No evidence found.</p>
+                  ) : (
+                    <div style={{ marginTop: 12 }}>
+                      <strong>Evidence</strong>
+                      <ul style={{ marginTop: 8 }}>
+                        {finding.evidences.map((evidence, index) => (
+                          <li key={`${finding.topic_id}-${index}`} style={{ marginBottom: 10 }}>
+                            <div>
+                              <strong>{evidence.original_filename}</strong> — keyword: <strong>{evidence.keyword}</strong>
+                            </div>
+                            <div style={{ whiteSpace: "pre-wrap" }}>{evidence.snippet}</div>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
         )}
       </div>
     </main>
