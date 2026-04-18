@@ -8,6 +8,17 @@ type Project = {
   description: string | null;
 };
 
+type DocumentItem = {
+  id: number;
+  project_id: number;
+  original_filename: string;
+  stored_filename: string;
+  file_path: string;
+  content_type: string | null;
+  file_size: number;
+  uploaded_at: string;
+};
+
 type HealthResponse = {
   app_status: string;
   db_status: string;
@@ -18,12 +29,17 @@ const API_BASE_URL =
 
 export default function HomePage() {
   const [projects, setProjects] = useState<Project[]>([]);
+  const [documents, setDocuments] = useState<DocumentItem[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState("");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
+  const [submittingProject, setSubmittingProject] = useState(false);
+  const [submittingDocument, setSubmittingDocument] = useState(false);
   const [error, setError] = useState("");
+  const [uploadMessage, setUploadMessage] = useState("");
 
   async function loadProjects() {
     const res = await fetch(`${API_BASE_URL}/projects`);
@@ -32,6 +48,10 @@ export default function HomePage() {
     }
     const data = await res.json();
     setProjects(data);
+
+    if (data.length > 0 && !selectedProjectId) {
+      setSelectedProjectId(String(data[0].id));
+    }
   }
 
   async function loadHealth() {
@@ -41,6 +61,20 @@ export default function HomePage() {
     }
     const data = await res.json();
     setHealth(data);
+  }
+
+  async function loadDocuments(projectId: string) {
+    if (!projectId) {
+      setDocuments([]);
+      return;
+    }
+
+    const res = await fetch(`${API_BASE_URL}/projects/${projectId}/documents`);
+    if (!res.ok) {
+      throw new Error("Failed to load documents");
+    }
+    const data = await res.json();
+    setDocuments(data);
   }
 
   useEffect(() => {
@@ -60,7 +94,16 @@ export default function HomePage() {
     initialize();
   }, []);
 
-  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+  useEffect(() => {
+    if (selectedProjectId) {
+      loadDocuments(selectedProjectId).catch((err) => {
+        setError("Failed to load documents.");
+        console.error(err);
+      });
+    }
+  }, [selectedProjectId]);
+
+  async function handleProjectSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
     if (!name.trim()) {
@@ -69,7 +112,7 @@ export default function HomePage() {
     }
 
     try {
-      setSubmitting(true);
+      setSubmittingProject(true);
       setError("");
 
       const res = await fetch(`${API_BASE_URL}/projects`, {
@@ -87,21 +130,72 @@ export default function HomePage() {
         throw new Error("Failed to create project");
       }
 
+      const newProject = await res.json();
+
       setName("");
       setDescription("");
       await loadProjects();
+      setSelectedProjectId(String(newProject.id));
     } catch (err) {
       setError("Failed to create project.");
       console.error(err);
     } finally {
-      setSubmitting(false);
+      setSubmittingProject(false);
+    }
+  }
+
+  async function handleDocumentSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+
+    if (!selectedProjectId) {
+      setUploadMessage("Please select a project first.");
+      return;
+    }
+
+    if (!selectedFile) {
+      setUploadMessage("Please choose a file to upload.");
+      return;
+    }
+
+    try {
+      setSubmittingDocument(true);
+      setUploadMessage("");
+
+      const formData = new FormData();
+      formData.append("file", selectedFile);
+
+      const res = await fetch(
+        `${API_BASE_URL}/projects/${selectedProjectId}/documents`,
+        {
+          method: "POST",
+          body: formData
+        }
+      );
+
+      if (!res.ok) {
+        throw new Error("Failed to upload document");
+      }
+
+      setSelectedFile(null);
+      const fileInput = document.getElementById("documentFile") as HTMLInputElement | null;
+      if (fileInput) {
+        fileInput.value = "";
+      }
+
+      setUploadMessage("Document uploaded successfully.");
+      await loadDocuments(selectedProjectId);
+    } catch (err) {
+      setUploadMessage("Failed to upload document.");
+      console.error(err);
+    } finally {
+      setSubmittingDocument(false);
     }
   }
 
   return (
-    <main style={{ maxWidth: 900, margin: "0 auto" }}>
+    <main style={{ maxWidth: 1000, margin: "0 auto" }}>
       <h1>Dniche LEED AI Platform</h1>
-      <p>Create and manage LEED assessment projects.</p>
+      <p>Create projects and upload LEED-related documents.</p>
 
       <div
         style={{
@@ -138,7 +232,7 @@ export default function HomePage() {
       >
         <h2 style={{ marginTop: 0 }}>Create Project</h2>
 
-        <form onSubmit={handleSubmit} style={{ display: "grid", gap: 12 }}>
+        <form onSubmit={handleProjectSubmit} style={{ display: "grid", gap: 12 }}>
           <div>
             <label htmlFor="name" style={{ display: "block", marginBottom: 6 }}>
               Project name
@@ -182,7 +276,7 @@ export default function HomePage() {
 
           <button
             type="submit"
-            disabled={submitting}
+            disabled={submittingProject}
             style={{
               padding: "10px 16px",
               borderRadius: 6,
@@ -192,7 +286,7 @@ export default function HomePage() {
               width: "fit-content"
             }}
           >
-            {submitting ? "Creating..." : "Create Project"}
+            {submittingProject ? "Creating..." : "Create Project"}
           </button>
         </form>
       </div>
@@ -201,7 +295,82 @@ export default function HomePage() {
         style={{
           padding: 16,
           border: "1px solid #ddd",
-          borderRadius: 8
+          borderRadius: 8,
+          marginBottom: 24
+        }}
+      >
+        <h2 style={{ marginTop: 0 }}>Upload Document</h2>
+
+        <form onSubmit={handleDocumentSubmit} style={{ display: "grid", gap: 12 }}>
+          <div>
+            <label
+              htmlFor="projectSelect"
+              style={{ display: "block", marginBottom: 6 }}
+            >
+              Select project
+            </label>
+            <select
+              id="projectSelect"
+              value={selectedProjectId}
+              onChange={(e) => setSelectedProjectId(e.target.value)}
+              style={{
+                width: "100%",
+                padding: 10,
+                border: "1px solid #ccc",
+                borderRadius: 6
+              }}
+            >
+              <option value="">-- Select a project --</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label
+              htmlFor="documentFile"
+              style={{ display: "block", marginBottom: 6 }}
+            >
+              Choose file
+            </label>
+            <input
+              id="documentFile"
+              type="file"
+              onChange={(e) => {
+                const file = e.target.files?.[0] || null;
+                setSelectedFile(file);
+              }}
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={submittingDocument}
+            style={{
+              padding: "10px 16px",
+              borderRadius: 6,
+              border: "1px solid #222",
+              background: "#fff",
+              cursor: "pointer",
+              width: "fit-content"
+            }}
+          >
+            {submittingDocument ? "Uploading..." : "Upload Document"}
+          </button>
+
+          {uploadMessage ? <p>{uploadMessage}</p> : null}
+        </form>
+      </div>
+
+      <div
+        style={{
+          padding: 16,
+          border: "1px solid #ddd",
+          borderRadius: 8,
+          marginBottom: 24
         }}
       >
         <h2 style={{ marginTop: 0 }}>Project List</h2>
@@ -221,33 +390,9 @@ export default function HomePage() {
           >
             <thead>
               <tr>
-                <th
-                  style={{
-                    textAlign: "left",
-                    borderBottom: "1px solid #ddd",
-                    padding: "8px 0"
-                  }}
-                >
-                  ID
-                </th>
-                <th
-                  style={{
-                    textAlign: "left",
-                    borderBottom: "1px solid #ddd",
-                    padding: "8px 0"
-                  }}
-                >
-                  Name
-                </th>
-                <th
-                  style={{
-                    textAlign: "left",
-                    borderBottom: "1px solid #ddd",
-                    padding: "8px 0"
-                  }}
-                >
-                  Description
-                </th>
+                <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>ID</th>
+                <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Name</th>
+                <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Description</th>
               </tr>
             </thead>
             <tbody>
@@ -255,9 +400,49 @@ export default function HomePage() {
                 <tr key={project.id}>
                   <td style={{ padding: "10px 0" }}>{project.id}</td>
                   <td style={{ padding: "10px 0" }}>{project.name}</td>
-                  <td style={{ padding: "10px 0" }}>
-                    {project.description || "-"}
-                  </td>
+                  <td style={{ padding: "10px 0" }}>{project.description || "-"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <div
+        style={{
+          padding: 16,
+          border: "1px solid #ddd",
+          borderRadius: 8
+        }}
+      >
+        <h2 style={{ marginTop: 0 }}>Documents for Selected Project</h2>
+
+        {!selectedProjectId ? (
+          <p>Select a project to view documents.</p>
+        ) : documents.length === 0 ? (
+          <p>No documents uploaded yet.</p>
+        ) : (
+          <table
+            style={{
+              width: "100%",
+              borderCollapse: "collapse"
+            }}
+          >
+            <thead>
+              <tr>
+                <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>ID</th>
+                <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Original filename</th>
+                <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Type</th>
+                <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Size (bytes)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {documents.map((doc) => (
+                <tr key={doc.id}>
+                  <td style={{ padding: "10px 0" }}>{doc.id}</td>
+                  <td style={{ padding: "10px 0" }}>{doc.original_filename}</td>
+                  <td style={{ padding: "10px 0" }}>{doc.content_type || "-"}</td>
+                  <td style={{ padding: "10px 0" }}>{doc.file_size}</td>
                 </tr>
               ))}
             </tbody>
