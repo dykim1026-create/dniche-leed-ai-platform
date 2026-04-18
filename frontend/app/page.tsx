@@ -31,6 +31,11 @@ type HealthResponse = {
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8001";
 
+function getPreview(text: string | null, limit = 240) {
+  if (!text) return "-";
+  return text.length > limit ? `${text.slice(0, limit)}...` : text;
+}
+
 export default function HomePage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
@@ -222,140 +227,81 @@ export default function HomePage() {
   }
 
   return (
-    <main style={{ maxWidth: 1100, margin: "0 auto" }}>
+    <main style={{ maxWidth: 1200, margin: "0 auto" }}>
       <h1>Dniche LEED AI Platform</h1>
-      <p>Create projects, upload documents, and track parse status.</p>
+      <p>Create projects, upload documents, and parse supported files.</p>
 
-      <div
-        style={{
-          padding: 16,
-          border: "1px solid #ddd",
-          borderRadius: 8,
-          marginBottom: 24
-        }}
-      >
+      <div style={{ padding: 16, border: "1px solid #ddd", borderRadius: 8, marginBottom: 24 }}>
         <h2 style={{ marginTop: 0 }}>System Status</h2>
         {loading ? (
           <p>Loading status...</p>
         ) : health ? (
           <>
-            <p>
-              App status: <strong>{health.app_status}</strong>
-            </p>
-            <p>
-              Database status: <strong>{health.db_status}</strong>
-            </p>
+            <p>App status: <strong>{health.app_status}</strong></p>
+            <p>Database status: <strong>{health.db_status}</strong></p>
           </>
         ) : (
           <p>Status unavailable</p>
         )}
       </div>
 
-      <div
-        style={{
-          padding: 16,
-          border: "1px solid #ddd",
-          borderRadius: 8,
-          marginBottom: 24
-        }}
-      >
+      <div style={{ padding: 16, border: "1px solid #ddd", borderRadius: 8, marginBottom: 24 }}>
         <h2 style={{ marginTop: 0 }}>Create Project</h2>
-
         <form onSubmit={handleProjectSubmit} style={{ display: "grid", gap: 12 }}>
           <div>
-            <label htmlFor="name" style={{ display: "block", marginBottom: 6 }}>
-              Project name
-            </label>
+            <label htmlFor="name" style={{ display: "block", marginBottom: 6 }}>Project name</label>
             <input
               id="name"
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Diriyah Residential Block A"
-              style={{
-                width: "100%",
-                padding: 10,
-                border: "1px solid #ccc",
-                borderRadius: 6
-              }}
+              style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 6 }}
             />
           </div>
 
           <div>
-            <label htmlFor="description" style={{ display: "block", marginBottom: 6 }}>
-              Description
-            </label>
+            <label htmlFor="description" style={{ display: "block", marginBottom: 6 }}>Description</label>
             <textarea
               id="description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Optional project description"
               rows={4}
-              style={{
-                width: "100%",
-                padding: 10,
-                border: "1px solid #ccc",
-                borderRadius: 6
-              }}
+              style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 6 }}
             />
           </div>
 
           <button
             type="submit"
             disabled={submittingProject}
-            style={{
-              padding: "10px 16px",
-              borderRadius: 6,
-              border: "1px solid #222",
-              background: "#fff",
-              cursor: "pointer",
-              width: "fit-content"
-            }}
+            style={{ padding: "10px 16px", borderRadius: 6, border: "1px solid #222", background: "#fff", cursor: "pointer", width: "fit-content" }}
           >
             {submittingProject ? "Creating..." : "Create Project"}
           </button>
         </form>
       </div>
 
-      <div
-        style={{
-          padding: 16,
-          border: "1px solid #ddd",
-          borderRadius: 8,
-          marginBottom: 24
-        }}
-      >
+      <div style={{ padding: 16, border: "1px solid #ddd", borderRadius: 8, marginBottom: 24 }}>
         <h2 style={{ marginTop: 0 }}>Upload Document</h2>
-
         <form onSubmit={handleDocumentSubmit} style={{ display: "grid", gap: 12 }}>
           <div>
-            <label htmlFor="projectSelect" style={{ display: "block", marginBottom: 6 }}>
-              Select project
-            </label>
+            <label htmlFor="projectSelect" style={{ display: "block", marginBottom: 6 }}>Select project</label>
             <select
               id="projectSelect"
               value={selectedProjectId}
               onChange={(e) => setSelectedProjectId(e.target.value)}
-              style={{
-                width: "100%",
-                padding: 10,
-                border: "1px solid #ccc",
-                borderRadius: 6
-              }}
+              style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 6 }}
             >
               <option value="">-- Select a project --</option>
               {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
+                <option key={project.id} value={project.id}>{project.name}</option>
               ))}
             </select>
           </div>
 
           <div>
-            <label htmlFor="documentFile" style={{ display: "block", marginBottom: 6 }}>
-              Choose file
-            </label>
+            <label htmlFor="documentFile" style={{ display: "block", marginBottom: 6 }}>Choose file</label>
             <input
               id="documentFile"
               type="file"
@@ -369,14 +315,7 @@ export default function HomePage() {
           <button
             type="submit"
             disabled={submittingDocument}
-            style={{
-              padding: "10px 16px",
-              borderRadius: 6,
-              border: "1px solid #222",
-              background: "#fff",
-              cursor: "pointer",
-              width: "fit-content"
-            }}
+            style={{ padding: "10px 16px", borderRadius: 6, border: "1px solid #222", background: "#fff", cursor: "pointer", width: "fit-content" }}
           >
             {submittingDocument ? "Uploading..." : "Upload Document"}
           </button>
@@ -385,51 +324,7 @@ export default function HomePage() {
         </form>
       </div>
 
-      <div
-        style={{
-          padding: 16,
-          border: "1px solid #ddd",
-          borderRadius: 8,
-          marginBottom: 24
-        }}
-      >
-        <h2 style={{ marginTop: 0 }}>Project List</h2>
-
-        {error ? (
-          <p style={{ color: "crimson" }}>{error}</p>
-        ) : loading ? (
-          <p>Loading projects...</p>
-        ) : projects.length === 0 ? (
-          <p>No projects yet.</p>
-        ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr>
-                <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>ID</th>
-                <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Name</th>
-                <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Description</th>
-              </tr>
-            </thead>
-            <tbody>
-              {projects.map((project) => (
-                <tr key={project.id}>
-                  <td style={{ padding: "10px 0" }}>{project.id}</td>
-                  <td style={{ padding: "10px 0" }}>{project.name}</td>
-                  <td style={{ padding: "10px 0" }}>{project.description || "-"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      <div
-        style={{
-          padding: 16,
-          border: "1px solid #ddd",
-          borderRadius: 8
-        }}
-      >
+      <div style={{ padding: 16, border: "1px solid #ddd", borderRadius: 8, marginBottom: 24 }}>
         <h2 style={{ marginTop: 0 }}>Documents for Selected Project</h2>
 
         {!selectedProjectId ? (
@@ -443,9 +338,9 @@ export default function HomePage() {
                 <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>ID</th>
                 <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Filename</th>
                 <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Type</th>
-                <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Size</th>
                 <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Status</th>
                 <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Message</th>
+                <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Preview</th>
                 <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Action</th>
               </tr>
             </thead>
@@ -455,23 +350,17 @@ export default function HomePage() {
                   <td style={{ padding: "10px 0", verticalAlign: "top" }}>{doc.id}</td>
                   <td style={{ padding: "10px 0", verticalAlign: "top" }}>{doc.original_filename}</td>
                   <td style={{ padding: "10px 0", verticalAlign: "top" }}>{doc.content_type || "-"}</td>
-                  <td style={{ padding: "10px 0", verticalAlign: "top" }}>{doc.file_size}</td>
                   <td style={{ padding: "10px 0", verticalAlign: "top" }}>{doc.parse_status}</td>
-                  <td style={{ padding: "10px 0", verticalAlign: "top", maxWidth: 320 }}>
-                    {doc.parse_message || "-"}
+                  <td style={{ padding: "10px 0", verticalAlign: "top", maxWidth: 220 }}>{doc.parse_message || "-"}</td>
+                  <td style={{ padding: "10px 0", verticalAlign: "top", maxWidth: 340, whiteSpace: "pre-wrap" }}>
+                    {getPreview(doc.extracted_text)}
                   </td>
                   <td style={{ padding: "10px 0", verticalAlign: "top" }}>
                     <button
                       type="button"
                       onClick={() => handleParseDocument(doc.id)}
                       disabled={parsingDocumentId === doc.id}
-                      style={{
-                        padding: "8px 12px",
-                        borderRadius: 6,
-                        border: "1px solid #222",
-                        background: "#fff",
-                        cursor: "pointer"
-                      }}
+                      style={{ padding: "8px 12px", borderRadius: 6, border: "1px solid #222", background: "#fff", cursor: "pointer" }}
                     >
                       {parsingDocumentId === doc.id ? "Parsing..." : "Parse"}
                     </button>

@@ -1,11 +1,17 @@
 from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
+import json
+import csv
+from io import StringIO
 
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+from pypdf import PdfReader
+from docx import Document as DocxDocument
+from openpyxl import load_workbook
 
 from app.db import Base, engine, SessionLocal
 from app.models import Project, Document
@@ -17,6 +23,7 @@ UPLOAD_DIR = Path("/app/uploads")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 TEXT_EXTENSIONS = {".txt", ".md", ".csv", ".json"}
+SUPPORTED_PARSE_EXTENSIONS = {".txt", ".md", ".csv", ".json", ".pdf", ".docx", ".xlsx"}
 
 
 app.add_middleware(
@@ -50,24 +57,111 @@ def get_db():
         db.close()
 
 
-def parse_basic_text_file(document: Document) -> tuple[str, str | None, str | None]:
+def parse_text_like_file(file_path: Path) -> str:
+    suffix = file_path.suffix.lower()
+
+    if suffix in {".txt", ".md"}:
+        return file_path.read_text(encoding="utf-8", errors="replace")
+
+    if suffix == ".json":
+        raw_text = file_path.read_text(encoding="utf-8", errors="replace")
+        try:
+            parsed = json.loads(raw_text)
+            return json.dumps(parsed, ensure_ascii=False, indent=2)
+        except Exception:
+            return raw_text
+
+    if suffix == ".csv":
+        raw_text = file_path.read_text(encoding="utf-8", errors="replace")
+        reader = csv.reader(StringIO(raw_text))
+        rows = []
+        for row in reader:
+            rows.append(" | ".join(row))
+        return "\n".join(rows)
+
+    raise ValueError("Unsupported text-like file type")
+
+
+def parse_pdf_file(file_path: Path) -> str:
+    reader = PdfReader(str(file_path))
+    pages = []
+
+    for idx, page in enumerate(reader.pages, start=1):
+        text_content = page.extract_text() or ""
+        pages.append(f"[Page {idx}]\n{text_content.strip()}")
+
+    return "\n\n".join(pages).strip()
+
+
+def parse_docx_file(file_path: Path) -> str:
+    doc = DocxDocument(str(file_path))
+    paragraphs = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
+
+    table_lines = []
+    for table in doc.tables:
+        for row in table.rows:
+            values = [cell.text.strip() for cell in row.cells]
+            if any(values):
+                table_lines.append(" | ".join(values))
+
+    combined = []
+    if paragraphs:
+        combined.append("\n".join(paragraphs))
+    if table_lines:
+        combined.append("\n".join(table_lines))
+
+    return "\n\n".join(combined).strip()
+
+
+def parse_xlsx_file(file_path: Path) -> str:
+    workbook = load_workbook(filename=str(file_path), data_only=True)
+    sheets_output = []
+
+    for sheet in workbook.worksheets:
+        rows_output = [f"[Sheet: {sheet.title}]"]
+        for row in sheet.iter_rows(values_only=True):
+            values = ["" if value is None else str(value) for value in row]
+            if any(v.strip() for v in values):
+                rows_output.append(" | ".join(values))
+        sheets_output.append("\n".join(rows_output))
+
+    return "\n\n".join(sheets_output).strip()
+
+
+def parse_supported_file(document: Document) -> tuple[str, str | None, str | None]:
     file_path = Path(document.file_path)
 
     if not file_path.exists():
-      return "failed", "File not found on disk.", None
+        return "failed", "File not found on disk.", None
 
     suffix = file_path.suffix.lower()
 
-    if suffix not in TEXT_EXTENSIONS:
+    if suffix not in SUPPORTED_PARSE_EXTENSIONS:
         return (
             "pending_parser",
-            "Basic parser currently supports only txt, md, csv, and json files.",
+            "Parser not available for this file type yet.",
             None,
         )
 
     try:
-        extracted_text = file_path.read_text(encoding="utf-8", errors="replace")
-        return "parsed", "Basic text extraction completed.", extracted_text
+        if suffix in TEXT_EXTENSIONS:
+            extracted_text = parse_text_like_file(file_path)
+        elif suffix == ".pdf":
+            extracted_text = parse_pdf_file(file_path)
+        elif suffix == ".docx":
+            extracted_text = parse_docx_file(file_path)
+        elif suffix == ".xlsx":
+            extracted_text = parse_xlsx_file(file_path)
+        else:
+            return "pending_parser", "Parser not available for this file type yet.", None
+
+        extracted_text = extracted_text.strip()
+
+        if not extracted_text:
+            return "parsed", "Parsing completed but no readable text was extracted.", ""
+
+        return "parsed", "Parsing completed successfully.", extracted_text
+
     except Exception as e:
         return "failed", f"Parsing failed: {str(e)}", None
 
@@ -183,7 +277,7 @@ def parse_document(document_id: int, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(document)
 
-    parse_status, parse_message, extracted_text = parse_basic_text_file(document)
+    parse_status, parse_message, extracted_text = parse_supported_file(document)
 
     document.parse_status = parse_status
     document.parse_message = parse_message
