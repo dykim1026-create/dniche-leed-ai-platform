@@ -1,3 +1,4 @@
+from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -15,6 +16,9 @@ app = FastAPI(title="Dniche LEED AI Backend")
 UPLOAD_DIR = Path("/app/uploads")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
+TEXT_EXTENSIONS = {".txt", ".md", ".csv", ".json"}
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -31,6 +35,12 @@ app.add_middleware(
 def on_startup():
     Base.metadata.create_all(bind=engine)
 
+    with engine.begin() as connection:
+        connection.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS parse_status VARCHAR DEFAULT 'uploaded'"))
+        connection.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS parse_message VARCHAR"))
+        connection.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS extracted_text TEXT"))
+        connection.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS parsed_at TIMESTAMP"))
+
 
 def get_db():
     db = SessionLocal()
@@ -38,6 +48,28 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def parse_basic_text_file(document: Document) -> tuple[str, str | None, str | None]:
+    file_path = Path(document.file_path)
+
+    if not file_path.exists():
+      return "failed", "File not found on disk.", None
+
+    suffix = file_path.suffix.lower()
+
+    if suffix not in TEXT_EXTENSIONS:
+        return (
+            "pending_parser",
+            "Basic parser currently supports only txt, md, csv, and json files.",
+            None,
+        )
+
+    try:
+        extracted_text = file_path.read_text(encoding="utf-8", errors="replace")
+        return "parsed", "Basic text extraction completed.", extracted_text
+    except Exception as e:
+        return "failed", f"Parsing failed: {str(e)}", None
 
 
 @app.get("/")
@@ -115,6 +147,8 @@ async def upload_document(
         file_path=str(destination),
         content_type=file.content_type,
         file_size=len(content),
+        parse_status="uploaded",
+        parse_message="File uploaded successfully. Parsing not started yet.",
     )
 
     db.add(document)
@@ -136,3 +170,27 @@ def list_documents(project_id: int, db: Session = Depends(get_db)):
         .order_by(Document.id.desc())
         .all()
     )
+
+
+@app.post("/documents/{document_id}/parse", response_model=DocumentResponse)
+def parse_document(document_id: int, db: Session = Depends(get_db)):
+    document = db.query(Document).filter(Document.id == document_id).first()
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    document.parse_status = "processing"
+    document.parse_message = "Parsing in progress..."
+    db.commit()
+    db.refresh(document)
+
+    parse_status, parse_message, extracted_text = parse_basic_text_file(document)
+
+    document.parse_status = parse_status
+    document.parse_message = parse_message
+    document.extracted_text = extracted_text
+    document.parsed_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(document)
+
+    return document

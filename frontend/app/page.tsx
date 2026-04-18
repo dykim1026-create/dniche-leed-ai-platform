@@ -16,7 +16,11 @@ type DocumentItem = {
   file_path: string;
   content_type: string | null;
   file_size: number;
+  parse_status: string;
+  parse_message: string | null;
+  extracted_text: string | null;
   uploaded_at: string;
+  parsed_at: string | null;
 };
 
 type HealthResponse = {
@@ -38,6 +42,7 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [submittingProject, setSubmittingProject] = useState(false);
   const [submittingDocument, setSubmittingDocument] = useState(false);
+  const [parsingDocumentId, setParsingDocumentId] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [uploadMessage, setUploadMessage] = useState("");
 
@@ -192,10 +197,34 @@ export default function HomePage() {
     }
   }
 
+  async function handleParseDocument(documentId: number) {
+    try {
+      setParsingDocumentId(documentId);
+      setUploadMessage("");
+
+      const res = await fetch(`${API_BASE_URL}/documents/${documentId}/parse`, {
+        method: "POST"
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to parse document");
+      }
+
+      if (selectedProjectId) {
+        await loadDocuments(selectedProjectId);
+      }
+    } catch (err) {
+      setUploadMessage("Failed to parse document.");
+      console.error(err);
+    } finally {
+      setParsingDocumentId(null);
+    }
+  }
+
   return (
-    <main style={{ maxWidth: 1000, margin: "0 auto" }}>
+    <main style={{ maxWidth: 1100, margin: "0 auto" }}>
       <h1>Dniche LEED AI Platform</h1>
-      <p>Create projects and upload LEED-related documents.</p>
+      <p>Create projects, upload documents, and track parse status.</p>
 
       <div
         style={{
@@ -253,10 +282,7 @@ export default function HomePage() {
           </div>
 
           <div>
-            <label
-              htmlFor="description"
-              style={{ display: "block", marginBottom: 6 }}
-            >
+            <label htmlFor="description" style={{ display: "block", marginBottom: 6 }}>
               Description
             </label>
             <textarea
@@ -303,10 +329,7 @@ export default function HomePage() {
 
         <form onSubmit={handleDocumentSubmit} style={{ display: "grid", gap: 12 }}>
           <div>
-            <label
-              htmlFor="projectSelect"
-              style={{ display: "block", marginBottom: 6 }}
-            >
+            <label htmlFor="projectSelect" style={{ display: "block", marginBottom: 6 }}>
               Select project
             </label>
             <select
@@ -330,10 +353,7 @@ export default function HomePage() {
           </div>
 
           <div>
-            <label
-              htmlFor="documentFile"
-              style={{ display: "block", marginBottom: 6 }}
-            >
+            <label htmlFor="documentFile" style={{ display: "block", marginBottom: 6 }}>
               Choose file
             </label>
             <input
@@ -382,12 +402,7 @@ export default function HomePage() {
         ) : projects.length === 0 ? (
           <p>No projects yet.</p>
         ) : (
-          <table
-            style={{
-              width: "100%",
-              borderCollapse: "collapse"
-            }}
-          >
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr>
                 <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>ID</th>
@@ -422,27 +437,45 @@ export default function HomePage() {
         ) : documents.length === 0 ? (
           <p>No documents uploaded yet.</p>
         ) : (
-          <table
-            style={{
-              width: "100%",
-              borderCollapse: "collapse"
-            }}
-          >
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr>
                 <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>ID</th>
-                <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Original filename</th>
+                <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Filename</th>
                 <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Type</th>
-                <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Size (bytes)</th>
+                <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Size</th>
+                <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Status</th>
+                <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Message</th>
+                <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: "8px 0" }}>Action</th>
               </tr>
             </thead>
             <tbody>
               {documents.map((doc) => (
                 <tr key={doc.id}>
-                  <td style={{ padding: "10px 0" }}>{doc.id}</td>
-                  <td style={{ padding: "10px 0" }}>{doc.original_filename}</td>
-                  <td style={{ padding: "10px 0" }}>{doc.content_type || "-"}</td>
-                  <td style={{ padding: "10px 0" }}>{doc.file_size}</td>
+                  <td style={{ padding: "10px 0", verticalAlign: "top" }}>{doc.id}</td>
+                  <td style={{ padding: "10px 0", verticalAlign: "top" }}>{doc.original_filename}</td>
+                  <td style={{ padding: "10px 0", verticalAlign: "top" }}>{doc.content_type || "-"}</td>
+                  <td style={{ padding: "10px 0", verticalAlign: "top" }}>{doc.file_size}</td>
+                  <td style={{ padding: "10px 0", verticalAlign: "top" }}>{doc.parse_status}</td>
+                  <td style={{ padding: "10px 0", verticalAlign: "top", maxWidth: 320 }}>
+                    {doc.parse_message || "-"}
+                  </td>
+                  <td style={{ padding: "10px 0", verticalAlign: "top" }}>
+                    <button
+                      type="button"
+                      onClick={() => handleParseDocument(doc.id)}
+                      disabled={parsingDocumentId === doc.id}
+                      style={{
+                        padding: "8px 12px",
+                        borderRadius: 6,
+                        border: "1px solid #222",
+                        background: "#fff",
+                        cursor: "pointer"
+                      }}
+                    >
+                      {parsingDocumentId === doc.id ? "Parsing..." : "Parse"}
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>

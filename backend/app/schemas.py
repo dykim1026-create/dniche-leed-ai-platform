@@ -25,7 +25,11 @@ class DocumentResponse(BaseModel):
     file_path: str
     content_type: Optional[str] = None
     file_size: int
+    parse_status: str
+    parse_message: Optional[str] = None
+    extracted_text: Optional[str] = None
     uploaded_at: datetime
+    parsed_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
