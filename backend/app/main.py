@@ -4,6 +4,7 @@ from uuid import uuid4
 import json
 import csv
 from io import StringIO
+import os
 
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -915,12 +916,19 @@ COST_ACTION_LIBRARY = {
 }
 
 
+frontend_origin = os.getenv("FRONTEND_ORIGIN", "").strip()
+
+allowed_origins = [
+    "http://localhost:3001",
+    "http://127.0.0.1:3001",
+]
+
+if frontend_origin:
+    allowed_origins.append(frontend_origin)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3001",
-        "http://127.0.0.1:3001",
-    ],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
